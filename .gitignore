@@ -1,0 +1,66 @@
+# Node / frontend artifacts
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+
+# Python / backend / ML artifacts
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+.ipynb_checkpoints/
+
+# Data and models (tracked separately if needed)
+ml/datasets/
+ml/models/
+
+# Environment & secrets
+.env
+.env.*
+backend/.env
+frontend/.env
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Node / frontend artifacts
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+
+# Python / ML artifacts
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+.ipynb_checkpoints/
+
+# Data and models
+data/
+ml/datasets/
+ml/models/
+
+# Environment & secrets
+.env
+.env.*
+backend/.env
+frontend/.env
+infra/.env
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
