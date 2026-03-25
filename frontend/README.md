@@ -1,46 +1,16 @@
-Frontend
-========
+# React + Vite
 
-This directory will contain the Next.js (App Router) frontend for the smart attendance system, implemented in TypeScript and following the non-negotiable requirements.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-Expected structure (no implementation code yet):
+Currently, two official plugins are available:
 
-- `app/` – App Router routes and layouts
-  - `(auth)/` – Authentication pages (e.g. login)
-  - `(dashboard)/` – Protected dashboard and feature pages
-- `components/`
-  - `ui/` – Atomic UI components (Button, Input, Badge, Spinner)
-  - `shared/` – Molecules (SearchBar, FormField, AlertToast)
-  - `features/` – Organisms (Sidebar, DataTable, Notifications)
-  - `layouts/` – Layout components (AppShell, PageWrapper)
-- `hooks/` – Custom React hooks (all prefixed with `use`)
-- `lib/`
-  - `api/` – `apiClient` and per-resource query hooks
-  - `config.ts` – Environment validation (per requirements)
-  - `logger.ts` – Logging adapter
-- `stores/` – Zustand stores for UI/global state
-- `types/` – Shared TypeScript types and Zod schemas
-- `utils/` – Pure utility functions
-- `public/` – Static assets
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-Frontend
-========
+## React Compiler
 
-This directory will contain the web frontend for the smart attendance system.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-Suggested substructure:
+## Expanding the ESLint configuration
 
-- `public/` – Static assets and the main HTML entrypoint
-- `src/` – Application source code
-  - `assets/` – Images and global styles
-  - `components/` – Reusable UI components
-  - `features/` – Feature-focused modules (auth, attendance, analytics, admin, etc.)
-  - `pages/` – Routed pages or views
-  - `hooks/` – Reusable React hooks (if applicable)
-  - `services/` – HTTP/API clients
-  - `store/` – Global state management
-  - `routes/` – Route configuration
-  - `utils/` – Utility helpers
-  - `types/` – Shared TypeScript types (if using TS)
-  - `config/` – Frontend-specific configuration
-
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
