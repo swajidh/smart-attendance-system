@@ -1,38 +1,34 @@
-import Navbar from './components/landing/Navbar';
-import WavyBackground from './components/landing/WavyBackground';
-import HeroSection from './components/landing/HeroSection';
-import ProblemSection from './components/landing/ProblemSection';
-import HowItWorks from './components/landing/HowItWorks';
-import AIFeatures from './components/landing/AIFeatures';
-import ScopeSection from './components/landing/ScopeSection';
-import SignificanceSection from './components/landing/SignificanceSection';
-import StakeholdersSection from './components/landing/StakeholdersSection';
-import DeliverablesSection from './components/landing/DeliverablesSection';
-import CTASection from './components/landing/CTASection';
-import Footer from './components/landing/Footer';
-import { useScrollReveal } from './hooks/useScrollReveal';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import LandingPage from './pages/landing/LandingPage';
+import DashboardLayout from './components/dashboard/DashboardLayout';
+
+// Dashboard Pages
+import DashboardHome from './pages/dashboard/DashboardHome';
+import FaceEnrollment from './pages/dashboard/FaceEnrollment';
+import LiveClassroom from './pages/dashboard/LiveClassroom';
+import AttentionAnalysis from './pages/dashboard/AttentionAnalysis';
+import ReportsLogs from './pages/dashboard/ReportsLogs';
+import SystemSettings from './pages/dashboard/SystemSettings';
 
 export default function App() {
-  useScrollReveal();
-
   return (
-    <div className="min-h-screen text-foreground selection:bg-primary/30 selection:text-foreground font-sans">
-      <WavyBackground />
-      <Navbar />
-      
-      <main>
-        <HeroSection />
-        <ProblemSection />
-        <HowItWorks />
-        <AIFeatures />
-        <ScopeSection />
-        <SignificanceSection />
-        <StakeholdersSection />
-        <DeliverablesSection />
-        <CTASection />
-      </main>
-
-      <Footer />
-    </div>
+    <>
+      <Toaster position="top-right" toastOptions={{ className: 'text-sm font-medium' }} />
+      <Router>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        
+        <Route path="/dashboard" element={<DashboardLayout />}>
+          <Route index element={<DashboardHome />} />
+          <Route path="enrollment" element={<FaceEnrollment />} />
+          <Route path="live" element={<LiveClassroom />} />
+          <Route path="attention" element={<AttentionAnalysis />} />
+          <Route path="reports" element={<ReportsLogs />} />
+          <Route path="settings" element={<SystemSettings />} />
+        </Route>
+      </Routes>
+    </Router>
+    </>
   );
 }
