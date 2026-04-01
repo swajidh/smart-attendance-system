@@ -12,7 +12,7 @@ import {
   LogOut 
 } from 'lucide-react';
 
-export default function Sidebar() {
+export default function Sidebar({ isCollapsed }) {
   const location = useLocation();
 
   const navLinks = [
@@ -48,7 +48,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-[240px] bg-white border-r border-slate-200 flex flex-col z-20">
+    <aside className={`fixed left-0 top-0 h-full w-[240px] bg-white border-r border-slate-200 flex flex-col z-20 transition-all duration-300 transform ${isCollapsed ? '-translate-x-full' : 'translate-x-0'}`}>
       {/* Logo Area */}
       <div className="h-[72px] flex items-center px-6 pt-2">
         <div className="flex items-center gap-3 text-slate-900 font-bold text-[17px] tracking-tight">

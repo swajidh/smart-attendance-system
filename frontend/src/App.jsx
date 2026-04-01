@@ -5,6 +5,7 @@ import DashboardLayout from './components/dashboard/DashboardLayout';
 
 // Dashboard Pages
 import DashboardHome from './pages/dashboard/DashboardHome';
+import CourseDashboard from './pages/dashboard/CourseDashboard';
 import FaceEnrollment from './pages/dashboard/FaceEnrollment';
 import LiveClassroom from './pages/dashboard/LiveClassroom';
 import AttentionAnalysis from './pages/dashboard/AttentionAnalysis';
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
           <Route path="enrollment" element={<FaceEnrollment />} />
+          <Route path="courses" element={<CourseDashboard />} />
           <Route path="live" element={<LiveClassroom />} />
           <Route path="attention" element={<AttentionAnalysis />} />
           <Route path="reports" element={<ReportsLogs />} />

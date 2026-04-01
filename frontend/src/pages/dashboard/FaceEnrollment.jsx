@@ -40,7 +40,8 @@ export default function FaceEnrollment() {
   const filteredStudents = studentsList.filter(student => 
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     student.studentId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.rollNo.toLowerCase().includes(searchQuery.toLowerCase())
+    student.rollNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (student.courseCode && student.courseCode.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleRegistrationSubmit = (formData) => {
@@ -69,18 +70,49 @@ export default function FaceEnrollment() {
         title="Face Enrollment" 
         description="Register structural facial data for students to enable AI attendance tracking."
         actions={
-          <Button variant="outline" icon={FileText}>
+          <Button variant="outline" icon={FileText} onClick={() => toast.success('Exporting student roster data...')}>
             Export Roster
           </Button>
         }
       />
 
+      {/* NEW: Top Stats Row (Consistency with Course Dash) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-5">
+           <div className="w-14 h-14 bg-indigo-50/50 text-indigo-600 rounded-2xl flex items-center justify-center shrink-0 border border-indigo-50">
+             <Users className="w-7 h-7" />
+           </div>
+           <div>
+             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Database Total</p>
+             <p className="text-3xl font-semibold text-slate-900 mt-1 tracking-tight">{studentsList.length}<span className="text-sm text-slate-400 font-medium ml-2">Students</span></p>
+           </div>
+        </div>
+        <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-5">
+           <div className="w-14 h-14 bg-emerald-50/50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0 border border-emerald-50">
+             <CheckCircle2 className="w-7 h-7" />
+           </div>
+           <div>
+             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Enrollment Rate</p>
+             <p className="text-3xl font-semibold text-slate-900 mt-1 tracking-tight">98.4%</p>
+           </div>
+        </div>
+        <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-5">
+           <div className="w-14 h-14 bg-blue-50/50 text-blue-600 rounded-2xl flex items-center justify-center shrink-0 border border-blue-50">
+             <Loader2 className="w-7 h-7" />
+           </div>
+           <div>
+             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Sync Status</p>
+             <p className="text-2xl font-semibold text-slate-900 mt-1 tracking-tight">Up to Date</p>
+           </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left Side: Capture/Upload Interface */}
         <div className="lg:col-span-2 space-y-6">
-          <Card noPadding>
-            <div className="px-5 pt-4 border-b border-slate-100 bg-white">
+          <Card noPadding className="rounded-[32px] overflow-hidden border-slate-100/60">
+            <div className="px-6 pt-5 border-b border-slate-100 bg-white">
               <Tabs tabs={tabs} activeTab={activeTab} onTabChange={(tab) => {
                 setActiveTab(tab);
                 if (tab === 'webcam') setCaptureStep('form');
@@ -120,6 +152,7 @@ export default function FaceEnrollment() {
                          name: currentStudent.name,
                          studentId: currentStudent.studentId,
                          rollNo: currentStudent.rollNo,
+                         courseCode: currentStudent.courseCode,
                          department: currentStudent.department,
                          status: 'Enrolled',
                          embeddings: 'Generated',
@@ -130,6 +163,21 @@ export default function FaceEnrollment() {
                        const updatedList = [newStudent, ...studentsList];
                        setStudentsList(updatedList);
                        localStorage.setItem('smart_attendance_enrolled_students', JSON.stringify(updatedList));
+
+                       // 🔄 Update Course Statistics
+                       const savedCourses = localStorage.getItem('smart_attendance_courses');
+                       if (savedCourses && currentStudent?.courseCode) {
+                         try {
+                           const courses = JSON.parse(savedCourses);
+                           const updatedCourses = courses.map(course => {
+                             if (course.code.toLowerCase() === currentStudent.courseCode.toLowerCase()) {
+                               return { ...course, students: (course.students || 0) + 1 };
+                             }
+                             return course;
+                           });
+                           localStorage.setItem('smart_attendance_courses', JSON.stringify(updatedCourses));
+                         } catch (e) { console.error('Failed to update course registry', e); }
+                       }
                        
                        setCaptureStep('form');
                        setCurrentStudent(null);
@@ -235,6 +283,7 @@ export default function FaceEnrollment() {
                             name: `Batch Student ${i+1}`,
                             studentId: `STU-1${(i+1).toString().padStart(2, '0')}`,
                             rollNo: `CS-21-1${(i+1).toString().padStart(2, '0')}`,
+                            courseCode: 'CS-402',
                             department: 'Computer Science',
                             status: 'Enrolled',
                             embeddings: 'Generated',
@@ -247,6 +296,7 @@ export default function FaceEnrollment() {
                           toast.success('Successfully synchronized 24 student embeddings from bulk upload!');
                           setUploadState('idle');
                           setActiveTab('webcam');
+                          setCaptureStep('form');
                         }}>Sync 24 Embeddings</Button>
                       </div>
                     </div>
@@ -258,44 +308,37 @@ export default function FaceEnrollment() {
           </Card>
         </div>
 
-        {/* Right Side: Quick Gallery / Stats */}
+        {/* Right Side: Quick Gallery / Stats (Refined) */}
         <div className="space-y-6">
-          <Card>
-            <CardHeader title="Enrollment Overview" className="px-0 pt-0 pb-4" />
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <div>
-                  <p className="text-[12px] font-bold text-slate-400 uppercase tracking-widest">Database</p>
-                  <p className="text-3xl font-bold text-slate-900 mt-1 tracking-tight">{studentsList.length}<span className="text-base font-semibold text-slate-400 ml-1">Total</span></p>
-                </div>
-                <div className="w-12 h-12 bg-emerald-100 text-emerald-600 flex items-center justify-center rounded-2xl shadow-sm">
-                  <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <Card>
+          <Card className="rounded-[28px] border-slate-100">
             <CardHeader 
               title="Requirements" 
-              className="px-0 pt-0 pb-4" 
+              className="px-0 pt-0 pb-4 border-b border-slate-100" 
             />
-            <div className="space-y-3 mt-2 text-sm text-slate-600">
-              <div className="flex items-start gap-2">
-                 <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>
-                 <p>Students must look directly at the camera with good lighting.</p>
+            <div className="space-y-4 mt-6 text-sm text-slate-600">
+              <div className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                 <div className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 text-[10px] font-bold">1</div>
+                 <p className="leading-relaxed">Students must look directly at the camera with good lighting.</p>
               </div>
-              <div className="flex items-start gap-2">
-                 <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>
-                 <p>Remove glasses and masks for the structural face map.</p>
+              <div className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                 <div className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 text-[10px] font-bold">2</div>
+                 <p className="leading-relaxed">Remove glasses and masks for the structural face map.</p>
               </div>
-              <div className="flex items-start gap-2">
-                 <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>
-                 <p>Allow processing time before testing live attendance.</p>
+              <div className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                 <div className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 text-[10px] font-bold">3</div>
+                 <p className="leading-relaxed">Allow processing time before testing live attendance.</p>
               </div>
             </div>
           </Card>
-
+          
+          <div className="bg-gradient-to-br from-[#1E5BF0] to-[#0A45D1] rounded-[28px] p-6 text-white overflow-hidden relative shadow-lg shadow-blue-500/20">
+             <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
+             <div className="relative z-10">
+                <h4 className="font-semibold text-lg mb-2">Pro Tip</h4>
+                <p className="text-blue-100 text-sm leading-relaxed mb-4">Batch uploads with clear folder naming (Student-ID) significantly improve sync accuracy.</p>
+                <div className="h-1 bg-white/20 rounded-full w-12" />
+             </div>
+          </div>
         </div>
       </div>
 
@@ -308,7 +351,7 @@ export default function FaceEnrollment() {
             <div className="relative">
               <input 
                 type="text" 
-                placeholder="Search ID, Name, Roll No..." 
+                placeholder="Search ID, Name, Roll No, Course..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none w-64 transition-all"
@@ -324,6 +367,7 @@ export default function FaceEnrollment() {
                 <th className="px-6 py-4 font-semibold">Student</th>
                 <th className="px-6 py-4 font-semibold">Student ID</th>
                 <th className="px-6 py-4 font-semibold">Roll No</th>
+                <th className="px-6 py-4 font-semibold text-center">Course</th>
                 <th className="px-6 py-4 font-semibold">Department</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 font-semibold">Embeddings</th>
@@ -343,6 +387,11 @@ export default function FaceEnrollment() {
                   </td>
                   <td className="px-6 py-4 text-slate-600 font-medium">{student.studentId}</td>
                   <td className="px-6 py-4 text-slate-600">{student.rollNo}</td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200 uppercase tracking-tight">
+                       {student.courseCode || 'N/A'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 text-slate-600 capitalize">{student.department}</td>
                   <td className="px-6 py-4">
                      <Badge variant="success">Enrolled</Badge>

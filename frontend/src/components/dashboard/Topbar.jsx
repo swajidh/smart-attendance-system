@@ -1,11 +1,14 @@
 import { PanelLeft } from 'lucide-react';
 
-export default function Topbar() {
+export default function Topbar({ onToggleSidebar }) {
   return (
     <header className="h-[72px] bg-white flex items-center justify-between px-6 sticky top-0 z-10 w-full border-b border-transparent shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
       {/* Left side: Toggle & Breadcrumb */}
       <div className="flex items-center gap-4">
-        <button className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors">
+        <button 
+          onClick={onToggleSidebar}
+          className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50 transition-all active:scale-95"
+        >
           <PanelLeft className="w-5 h-5 stroke-[2]" />
         </button>
         <span className="text-[17px] font-semibold text-slate-800 tracking-tight">

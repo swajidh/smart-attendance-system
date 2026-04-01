@@ -9,6 +9,7 @@ export default function StudentRegistrationForm({ onSubmit, existingIds = [] }) 
     studentId: '',
     name: '',
     rollNo: '',
+    courseCode: '',
     department: ''
   });
   const [errors, setErrors] = useState({});
@@ -20,6 +21,7 @@ export default function StudentRegistrationForm({ onSubmit, existingIds = [] }) 
     
     if (!formData.name.trim()) newErrors.name = 'Full Name is required';
     if (!formData.rollNo.trim()) newErrors.rollNo = 'Roll Number is required';
+    if (!formData.courseCode.trim()) newErrors.courseCode = 'Course Code is required';
     if (!formData.department) newErrors.department = 'Please select a department';
 
     setErrors(newErrors);
@@ -57,7 +59,15 @@ export default function StudentRegistrationForm({ onSubmit, existingIds = [] }) 
           value={formData.studentId}
           onChange={handleChange}
           error={errors.studentId}
-          className="col-span-2"
+        />
+        
+        <Input 
+          id="rollNo"
+          label="Roll / Seat Number"
+          placeholder="e.g. BESE-10C"
+          value={formData.rollNo}
+          onChange={handleChange}
+          error={errors.rollNo}
         />
         
         <Input 
@@ -71,12 +81,12 @@ export default function StudentRegistrationForm({ onSubmit, existingIds = [] }) 
         />
 
         <Input 
-          id="rollNo"
-          label="Roll / Seat Number"
-          placeholder="e.g. BESE-10C"
-          value={formData.rollNo}
+          id="courseCode"
+          label="Course / Course Code"
+          placeholder="e.g. CS-301"
+          value={formData.courseCode}
           onChange={handleChange}
-          error={errors.rollNo}
+          error={errors.courseCode}
         />
 
         <Select 
