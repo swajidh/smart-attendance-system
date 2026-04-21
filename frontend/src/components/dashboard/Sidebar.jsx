@@ -20,7 +20,7 @@ export default function Sidebar({ isCollapsed }) {
       category: "OVERVIEW",
       items: [
         { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-        { name: "Live Session", path: "/dashboard/live", icon: Eye }
+        { name: "Live Classroom", path: "/dashboard/live", icon: Eye }
       ]
     },
     {
