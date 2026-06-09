@@ -1,5 +1,10 @@
-# Python 3.12+. Install torch for your platform: https://pytorch.org/get-started/locally/
+# Python 3.12+. Install torch: https://pytorch.org/get-started/locally/
 torch>=2.1.0
 torchvision>=0.16.0
 Pillow>=10.0.0
 tqdm>=4.66.0
+ultralytics>=8.3.0
+numpy>=1.26.0
+requests>=2.31.0
+scikit-learn>=1.5.0
+scipy>=1.11.0

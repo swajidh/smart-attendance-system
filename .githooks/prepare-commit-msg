@@ -1,0 +1,3 @@
+#!/bin/sh
+# Strip Co-authored-by lines so commits only list the human author.
+python "$(dirname "$0")/strip_coauthor.py" "$1"

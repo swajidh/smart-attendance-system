@@ -16,6 +16,8 @@ venv/
 # Data and models (tracked separately if needed)
 ml/datasets/
 ml/models/
+ml/weights/
+ml/reports/
 
 # Environment & secrets
 .env
@@ -49,6 +51,8 @@ venv/
 data/
 ml/datasets/
 ml/models/
+ml/weights/
+ml/reports/
 
 # Environment & secrets
 .env

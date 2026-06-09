@@ -1,0 +1,10 @@
+---
+description: Git commit conventions for this repository
+alwaysApply: true
+---
+
+# Git commits
+
+- Never add `Co-authored-by:` trailers to commit messages (including `Co-authored-by: Cursor`).
+- Use a single-line subject or short subject + body; only the human author's identity belongs on the commit.
+- The repo `.githooks/prepare-commit-msg` hook removes any Co-authored-by lines if they are added by mistake.
