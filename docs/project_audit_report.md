@@ -1,11 +1,11 @@
 # Smart Attendance System — Comprehensive Project Audit Report
 
-**Date:** 2026-06-04  
-**Auditor:** Antigravity AI Agent  
-**Source of Truth:** User stories provided in the request + codebase at `c:\Users\Hashir Mehboob\Desktop\smart-attendance-system`
+**Date:** 2026-06-18  
+**Auditor:** Codebase review (updated from 2026-06-04 audit)  
+**Source of Truth:** User stories in `docs/requirements_specification.md` + implemented codebase
 
-> [!IMPORTANT]
-> The three documentation files (`docs/project_overview.md`, `docs/requirements_specification.md`, `docs/system_architecture.md`) are **all empty** (0 bytes). This audit therefore uses the **user stories provided in the request** as the documented specification and cross-references them against the **implemented codebase**.
+> [!NOTE]
+> This report reflects the **current implementation state** as of 2026-06-18. Planned features not yet built are documented in `docs/development_todo.md` and left unchanged there.
 
 ---
 
@@ -65,15 +65,15 @@ graph TD
 
 | Module | Status | Detail |
 |--------|--------|--------|
-| 1. Authentication & User Management (UAM) | ❌ Not Started | `auth.py` is empty (0 bytes). No login, logout, password reset, RBAC, or session management exists. |
-| 2. Face Enrollment (FEM) | 🟡 Partially Completed (~55%) | Frontend forms, webcam capture, bulk upload UI, and student registry table are built. Backend `ml_service.py` has enrollment logic with mocked embeddings. **Missing:** real FaceNet/ArcFace model, actual DB storage, image quality feedback UI, re-enrollment history logging. |
-| 3. Attendance Processing (APM) | 🟡 Partially Completed (~40%) | Frontend `LiveClassroom.jsx` has webcam feed, simulated face detection with bounding boxes, manual override, and session finalization. Backend has WebSocket endpoint. **Missing:** real face recognition (currently random), actual embedding comparison, database persistence, proper session management API. |
-| 4. Attendance Summary (AS) | 🟡 Partially Completed (~35%) | `ReportsLogs.jsx` shows session archives, attendance rates, trend bars, export buttons. **Missing:** date/subject filtering, actual student percentage calculations, CSV export (currently mock toast), poor attendance report (<75%), "Last Seen" timestamps. |
-| 5. System Administration (SAM-Admin) | ❌ Not Started | `SystemSettings.jsx` is a placeholder (1 line). No system health dashboard, backup functionality, RBAC panel, or audit log viewer. |
-| 6. Behavioural Attention Tracking (BTM) | ❌ Not Started | `AttentionAnalysis.jsx` is a placeholder (1 line). No head pose detection, attention scoring, posture analysis, or engagement models exist in the ML module. |
-| 7. Academic Intervention & Alerting (AIM) | ❌ Not Started | No alerting system, risk list generation, threshold configuration, heatmap, or notification channel management exists anywhere. |
-| 8. Reporting & Statistical Summary (RSM) | 🟡 Partially Completed (~25%) | `ReportsLogs.jsx` provides basic session archive viewing. Dashboard home shows aggregate stats. **Missing:** engagement summaries, at-risk monthly reports, automated CSV/PDF generation, student personal portal, focus heatmaps. |
-| 9. Announcements / System Management | ❌ Not Started | `course-dashboard/` directory is empty. No announcement system, CI/CD pipeline management, or SIS import functionality. |
+| 1. Authentication & User Management (UAM) | 🟡 Partially Completed (~15%) | `auth.py` is empty. Frontend has `ProfilePage.jsx`, role-filtered sidebar, and `api.js` JWT interceptor. `ProtectedRoute` bypasses auth with mock admin user. No login/signup/reset pages. |
+| 2. Face Enrollment (FEM) | 🟡 Partially Completed (~60%) | Full frontend: registration form, 15-sample guided webcam capture, bulk upload UI, searchable gallery, re-enroll flow. Backend `POST /attendance/enroll` with MediaPipe validation and mock embeddings. **Missing:** real model, DB, backend student routes. |
+| 3. Attendance Processing (APM) | 🟡 Partially Completed (~45%) | `LiveClassroom.jsx`: webcam, canvas overlay, WebSocket client, manual override, session finalize. Backend `WS /attendance/ws/detect` with real detection, random matching. **Missing:** session API, real recognition, DB persistence, path alignment with frontend. |
+| 4. Attendance Summary (AS) | 🟡 Partially Completed (~35%) | `ReportsLogs.jsx` shows session archives from `localStorage`, basic stats, course filter, trend bars. **Missing:** backend reports, real CSV export, poor attendance report, last-seen timestamps. |
+| 5. System Administration (SAM-Admin) | ❌ Not Started | `SystemSettings.jsx` is a placeholder (1 line). |
+| 6. Behavioural Attention Tracking (BTM) | ❌ Not Started | `AttentionAnalysis.jsx` is a placeholder (1 line). `ml/` directory is empty. |
+| 7. Academic Intervention & Alerting (AIM) | ❌ Not Started | Sidebar links to `/dashboard/alerts` (route not defined). No alerting implementation. |
+| 8. Reporting & Statistical Summary (RSM) | 🟡 Partially Completed (~25%) | `DashboardHome.jsx` and `ReportsLogs.jsx` show stats from `localStorage`. **Missing:** backend analytics, exports, student portal. |
+| 9. Announcements / System Management | 🟡 Partially Completed (~15%) | `CourseDashboard.jsx` provides full course CRUD via `localStorage`. **Missing:** backend courses API, announcements, SIS import. |
 
 ### 2.2 User Story Coverage Detail
 
@@ -82,34 +82,34 @@ graph TD
 | ID | Story Summary | Status |
 |----|--------------|--------|
 | UAM-01 | Teacher/admin login | ❌ Not Started |
-| UAM-02 | Logout & session destroy | ❌ Not Started |
-| UAM-03 | Instructor bio | ❌ Not Started |
+| UAM-02 | Logout & session destroy | 🟡 Partial (sidebar clears `localStorage`; no backend) |
+| UAM-03 | Instructor bio | 🟡 Partial (`ProfilePage.jsx` UI only) |
 | UAM-04 | Password reset | ❌ Not Started |
-| UAM-05 | Role management (RBAC) | ❌ Not Started |
+| UAM-05 | Role management (RBAC) | 🟡 Partial (sidebar nav filtering with mock user) |
 | UAM-06 | Student sign-up & login | ❌ Not Started |
-| UAM-07 | Profile picture upload | ❌ Not Started |
+| UAM-07 | Profile picture upload | 🟡 Partial (`ProfilePage.jsx` UI only) |
 
 #### Module 2: Face Enrollment (FEM)
 
 | ID | Story Summary | Status |
 |----|--------------|--------|
 | FEM-01 | Student basic info registration | ✅ Completed (frontend form with validation) |
-| FEM-02 | Multi-angle webcam capture | 🟡 Partial (webcam works, no angle guidance) |
-| FEM-03 | Convert to 128-d embeddings | 🟡 Partial (mock embeddings, no real model) |
-| FEM-04 | Bulk photo upload (ZIP) | 🟡 Partial (UI exists, mock processing) |
+| FEM-02 | Multi-angle webcam capture | 🟡 Partial (15-sample guided capture with angle prompts) |
+| FEM-03 | Convert to 128-d embeddings | 🟡 Partial (backend mock embeddings; frontend simulates pipeline) |
+| FEM-04 | Bulk photo upload (ZIP) | 🟡 Partial (UI with simulated processing) |
 | FEM-05 | Enrolled student gallery | ✅ Completed (searchable datatable) |
-| FEM-06 | Quality validation (blur/lighting) | 🟡 Partial (Laplacian blur check in backend, no real-time UI feedback) |
-| FEM-07 | Re-enroll / update face data | ❌ Not Started |
+| FEM-06 | Quality validation (blur/lighting) | 🟡 Partial (Laplacian blur in backend; simulated UI warnings) |
+| FEM-07 | Re-enroll / update face data | 🟡 Partial (re-enroll button + query param flow; no audit log) |
 
 #### Module 3: Attendance Processing (APM)
 
 | ID | Story Summary | Status |
 |----|--------------|--------|
-| APM-01 | Real-time face detection with bounding boxes | 🟡 Partial (canvas overlay works, detection is simulated) |
-| APM-02 | Face matching via embeddings | ❌ Not Started (random matching only) |
-| APM-03 | Label unknowns | 🟡 Partial (simulated unknown tagging, no security log DB) |
-| APM-04 | Auto-mark Present | 🟡 Partial (localStorage-based, no real DB) |
-| APM-05 | Mark Absent at session close | 🟡 Partial (roster diffing exists, localStorage only) |
+| APM-01 | Real-time face detection with bounding boxes | 🟡 Partial (canvas overlay; WebSocket wired; offline fallback) |
+| APM-02 | Face matching via embeddings | ❌ Not Started (backend random matching only) |
+| APM-03 | Label unknowns | 🟡 Partial (UI shows Unknown labels; backend assigns randomly) |
+| APM-04 | Auto-mark Present | 🟡 Partial (roster updated from WebSocket or local state) |
+| APM-05 | Mark Absent at session close | 🟡 Partial (session saved to `localStorage`; no backend session API) |
 | APM-06 | Manual override | ✅ Completed (toggle switch in frontend) |
 | APM-07 | Optimized lightweight model | ❌ Not Started (no model optimization) |
 
@@ -150,37 +150,41 @@ graph TD
 
 | Module | Status | Integrated? | End-to-End Working? | Notes |
 |--------|--------|-------------|---------------------|-------|
-| Auth & User Mgmt (UAM) | ❌ Not Started | ❌ No | ❌ No | No auth exists. All dashboard pages are unprotected. No roles, no sessions. |
-| Face Enrollment (FEM) | 🟡 Partial | 🟡 Partial | ❌ No | Frontend form → localStorage → Student registry works. Backend ML service exists but uses mock embeddings. No DB integration. |
-| Attendance Processing (APM) | 🟡 Partial | 🟡 Partial | ❌ No | LiveClassroom reads enrolled students from localStorage, simulates detection, saves session logs to localStorage. Backend WebSocket endpoint exists but is not connected to frontend. |
-| Attendance Summary (AS) | 🟡 Partial | 🟡 Partial | ❌ No | ReportsLogs reads session logs from localStorage. Export functionality is mocked. No real DB queries or filtering. |
+| Auth & User Mgmt (UAM) | 🟡 Partial | ❌ No | ❌ No | Frontend shell only. `ProtectedRoute` bypasses auth with mock user. No backend auth. |
+| Face Enrollment (FEM) | 🟡 Partial | 🟡 Partial | ❌ No | Frontend CRUD + capture works via `localStorage`. Backend enroll endpoint exists but path differs from frontend calls. |
+| Attendance Processing (APM) | 🟡 Partial | 🟡 Partial | ❌ No | Frontend WebSocket client wired; backend endpoint at different path. Offline fallback when backend down. |
+| Attendance Summary (AS) | 🟡 Partial | 🟡 Partial | ❌ No | Reports read from `localStorage`. Export is mock toast. |
 | System Administration | ❌ Not Started | ❌ No | ❌ No | Placeholder page only. |
-| Behavioural Attention Tracking (BTM) | ❌ Not Started | ❌ No | ❌ No | Placeholder page only. No ML models. |
-| Intervention & Alerting (AIM) | ❌ Not Started | ❌ No | ❌ No | No implementation at all. |
-| Reporting & Stats (RSM) | 🟡 Partial | 🟡 Partial | ❌ No | DashboardHome and ReportsLogs show data from localStorage. No real analytics engine. |
-| Announcements / System Mgmt | ❌ Not Started | ❌ No | ❌ No | Empty directory. Course management is in CourseDashboard (frontend only, localStorage). |
+| Behavioural Attention Tracking (BTM) | ❌ Not Started | ❌ No | ❌ No | Placeholder page only. |
+| Intervention & Alerting (AIM) | ❌ Not Started | ❌ No | ❌ No | No implementation. |
+| Reporting & Stats (RSM) | 🟡 Partial | 🟡 Partial | ❌ No | Dashboard and reports from `localStorage`. |
+| Announcements / System Mgmt | 🟡 Partial | ❌ No | ❌ No | Course CRUD in `CourseDashboard.jsx` (`localStorage` only). |
 
 > [!CAUTION]
-> **No single end-to-end flow is fully functional.** All data flows use `localStorage` as a mock database. The backend API has only 2 endpoints (`POST /enroll` and `WS /detect`), and the frontend does not actually call them — it operates entirely on client-side simulated data.
+> **No single end-to-end flow is fully functional with backend persistence.** The frontend is API-ready with robust `localStorage` fallbacks. The backend has only 3 endpoints, and several frontend API paths do not match backend routes.
 
 ---
 
 ## 4. Gap Analysis
 
-### 4.1 Modules Not Yet Developed (5 of 9)
+### 4.1 Modules Not Yet Developed (4 of 9)
 
-1. **Authentication & User Management** — Zero implementation
-2. **System Administration** — Placeholder only
-3. **Behavioural Attention Tracking** — Placeholder only
-4. **Academic Intervention & Alerting** — Zero implementation
-5. **Announcements / System Management** — Empty directory
+1. **System Administration** — Placeholder only
+2. **Behavioural Attention Tracking** — Placeholder only
+3. **Academic Intervention & Alerting** — Zero implementation
+4. **Authentication (backend)** — No JWT, no login API (frontend shell exists)
+
+### 4.1b Modules with Frontend-Only Implementation
+
+1. **Course Management (SAM-01)** — `CourseDashboard.jsx` via `localStorage`
+2. **Auth UI shell (UAM)** — Profile page, sidebar, mock ProtectedRoute
 
 ### 4.2 Features Missing Inside Partially Completed Modules
 
 | Module | Missing Features |
 |--------|-----------------|
-| Face Enrollment | Real FaceNet/ArcFace model integration, persistent DB storage, angle-guided capture, real-time quality feedback UI, re-enrollment with audit history |
-| Attendance Processing | Real face recognition (not random), embedding comparison engine, proper session management API, database persistence, unknown face security logging |
+| Face Enrollment | Real FaceNet/ArcFace model integration, persistent DB storage, real-time quality feedback (currently simulated in UI), backend student routes aligned with frontend paths, re-enrollment audit history |
+| Attendance Processing | Real face recognition (not random), embedding comparison engine, session management API at paths frontend expects, database persistence, unknown face security logging |
 | Attendance Summary | Date/subject filtering, real CSV export, dynamic attendance percentages, poor attendance threshold report, "Last Seen" timestamp |
 | Reporting & Stats | Engagement summaries, at-risk reports, automated file generation, student portal, focus heatmaps |
 
@@ -188,13 +192,13 @@ graph TD
 
 | Integration | Status |
 |-------------|--------|
-| Frontend ↔ Backend API | ❌ Frontend does not call any backend endpoints |
-| Backend ↔ Database | ❌ No database configured (no MongoDB/PostgreSQL connection) |
-| Backend ↔ ML Model | 🟡 `ml_service.py` exists with mock embeddings |
-| Authentication guard on routes | ❌ All routes are publicly accessible |
-| WebSocket real-time pipeline | ❌ Backend endpoint exists but frontend doesn't use it |
-| Reporting ↔ Database queries | ❌ Reports read from localStorage |
-| CI/CD pipeline | ❌ Docker/K8s manifests exist as empty files |
+| Frontend ↔ Backend API | 🟡 Partial — frontend calls API with `localStorage` fallback; most endpoints missing; path mismatches on enroll and WebSocket |
+| Backend ↔ Database | ❌ No database configured |
+| Backend ↔ ML Model | 🟡 `ml_service.py` with MediaPipe detection; mock embeddings/matching |
+| Authentication guard on routes | ❌ `ProtectedRoute` bypasses auth with mock user |
+| WebSocket real-time pipeline | 🟡 Frontend client wired; backend at different path (`/attendance/ws/detect` vs `/sessions/{id}/detect`) |
+| Reporting ↔ Database queries | ❌ Reports read from `localStorage` |
+| CI/CD pipeline | ❌ No Docker/CI files (empty stubs) |
 
 ### 4.4 High-Priority Items Before Deployment
 
@@ -210,12 +214,12 @@ graph TD
 |--------|-------|
 | **Total Modules** | 9 |
 | **Fully Completed** | 0 |
-| **Partially Completed** | 4 (FEM, APM, AS, RSM) |
-| **Not Started** | 5 (UAM, SAM, BTM, AIM, Announcements) |
+| **Partially Completed** | 5 (UAM shell, FEM, APM, AS, RSM) + 1 frontend-only (SAM courses) |
+| **Not Started** | 4 (SAM-Admin, BTM, AIM, backend auth) |
 | **Total User Stories** | 55 |
 | **Completed Stories** | 3 (FEM-01, FEM-05, APM-06) |
-| **Partially Completed Stories** | 14 |
-| **Not Started Stories** | 38 |
+| **Partially Completed Stories** | 17 |
+| **Not Started Stories** | 35 |
 | **Estimated Development Phases Remaining** | 5–6 major phases |
 
 ---
@@ -227,7 +231,7 @@ graph TD
 | Authentication | ❌ | No auth system |
 | Database | ❌ | No database configured or connected |
 | API completeness | ❌ | 2 endpoints exist; ~20+ needed |
-| Frontend-backend integration | ❌ | Frontend operates on localStorage mocks |
+| Frontend-backend integration | 🟡 Partial | Frontend API-ready with fallback; path mismatches; most endpoints missing |
 | ML model deployment | ❌ | Mock embeddings; no real model |
 | Infrastructure | ❌ | Docker/K8s files are empty stubs |
 | Testing | ❌ | Test directories exist but contain no tests |
@@ -235,7 +239,7 @@ graph TD
 | Monitoring | ❌ | No system health monitoring |
 
 > [!CAUTION]
-> **Deployment Readiness: NOT READY.** The project is at a **prototype/UI-scaffold stage** (~15-20% overall completion). It demonstrates UI flows with simulated data but has no functional backend, no database, no real ML models, and no authentication.
+> **Deployment Readiness: NOT READY.** The project is at a **prototype/UI-scaffold stage** (~20–25% overall completion). The frontend demonstrates full UI flows with `localStorage` persistence. The backend has 3 endpoints with mock ML. No database, no real auth, and no deployment infrastructure.
 
 ---
 

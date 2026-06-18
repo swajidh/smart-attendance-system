@@ -13,6 +13,8 @@ import {
   User
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import api from '../../services/api';
+import toast from 'react-hot-toast';
 
 export default function Sidebar({ isCollapsed }) {
   const location = useLocation();
@@ -24,15 +26,21 @@ export default function Sidebar({ isCollapsed }) {
     if (userStr) {
       try {
         setUser(JSON.parse(userStr));
-      } catch (e) {
-        console.error('Failed to parse user', e);
+      } catch {
+        // ignore corrupt data
       }
     }
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // best-effort — clear locally regardless
+    }
     localStorage.removeItem('smart_attendance_token');
     localStorage.removeItem('smart_attendance_user');
+    toast.success('Signed out');
     navigate('/login');
   };
 
@@ -51,7 +59,7 @@ export default function Sidebar({ isCollapsed }) {
       items: [
         { name: "Students", path: "/dashboard/students", icon: Users },
         { name: "Courses", path: "/dashboard/courses", icon: BookOpen },
-        { name: "Attendance", path: "/dashboard/attendance", icon: ClipboardList }
+        { name: "Attendance", path: "/dashboard/reports", icon: ClipboardList }
       ]
     },
     {
@@ -72,8 +80,8 @@ export default function Sidebar({ isCollapsed }) {
     }
   ];
 
-  // Filter links based on user role (defaulting to show all if no user yet to avoid layout jumping)
-  const userRole = user?.role || 'admin';
+  // Only show nav items permitted for the authenticated user's role
+  const userRole = user?.role || 'student';
   const visibleLinks = navLinks.filter(section => !section.roles || section.roles.includes(userRole));
 
   return (

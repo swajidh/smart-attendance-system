@@ -1,291 +1,322 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Calendar, 
-  Clock, 
-  Users, 
-  BookOpen, 
-  MoreVertical, 
-  ArrowRight,
-  TrendingUp,
-  CheckCircle2,
-  XCircle,
-  Clock3,
-  CalendarDays,
-  LayoutGrid,
-  List,
-  Filter,
-  AlertCircle
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Plus, Search, Calendar, Clock, Users, BookOpen, MoreVertical,
+  ArrowRight, TrendingUp, XCircle, Clock3, CalendarDays,
+  LayoutGrid, List, Filter, AlertCircle, RefreshCw, Edit2, Trash2,
+  UserPlus, UserMinus, CheckCircle2,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardContent } from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import toast from 'react-hot-toast';
+import api from '../../services/api';
 
 export default function CourseDashboard() {
-  const [courses, setCourses] = useState(() => {
-    const saved = localStorage.getItem('smart_attendance_courses');
-    return saved ? JSON.parse(saved) : [
-      { id: '1', code: 'CS-402', name: 'Artificial Intelligence', instructor: 'Dr. Sarah Ahmed', students: 42, attendance: 85, slots: ['Mon 10:00 AM', 'Thu 02:00 PM'] },
-      { id: '2', code: 'CS-301', name: 'Database Systems', instructor: 'Prof. Usman Ali', students: 38, attendance: 92, slots: ['Tue 09:00 AM', 'Fri 11:00 AM'] },
-      { id: '3', code: 'SE-210', name: 'Software Requirement Eng.', instructor: 'Ms. Hiba Khan', students: 45, attendance: 78, slots: ['Wed 01:00 PM', 'Sat 10:00 AM'] }
-    ];
-  });
-
+  const [courses, setCourses] = useState([]);
+  const [students, setStudents] = useState([]); // all students (for enrollment picker)
+  const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
-  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingCourse, setEditingCourse] = useState(null);
+  const [viewMode, setViewMode] = useState('grid');
+  const [selectedCourse, setSelectedCourse] = useState(null); // detail panel
+  const [courseDetail, setCourseDetail] = useState(null);     // detail data
+  const [detailLoading, setDetailLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [enrollPickerOpen, setEnrollPickerOpen] = useState(false);
+  const [enrollSearch, setEnrollSearch] = useState('');
+
+  const fetchCourses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/courses');
+      setCourses(res.data);
+    } catch {
+      toast.error('Failed to load courses');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchStudents = useCallback(async () => {
+    try {
+      const res = await api.get('/students');
+      setStudents(res.data);
+    } catch { /* silent */ }
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('smart_attendance_courses', JSON.stringify(courses));
-  }, [courses]);
+    fetchCourses();
+    fetchStudents();
+    // Retire localStorage key if present
+    localStorage.removeItem('smart_attendance_courses');
+  }, [fetchCourses, fetchStudents]);
 
-  const filteredCourses = courses.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.code.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const handleAddCourse = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const newCourse = {
-      id: Math.random().toString(36).substr(2, 9),
-      code: formData.get('code'),
-      name: formData.get('name'),
-      instructor: formData.get('instructor') || 'Dr. Unassigned',
-      students: 0,
-      attendance: 75, // Default starting point
-      slots: formData.get('slots').split(',').map(s => s.trim())
-    };
-    setCourses([...courses, newCourse]);
-    setIsAddModalOpen(false);
-    toast.success('Course added successfully!');
-  };
-
-  const handleDeleteCourse = (id) => {
-    if (window.confirm('Are you sure you want to delete this course? All associated records will be lost.')) {
-      setCourses(courses.filter(c => c.id !== id));
-      toast.success('Course deleted');
-      setSelectedCourse(null);
+  const openDetail = async (course) => {
+    setSelectedCourse(course);
+    setDetailLoading(true);
+    setCourseDetail(null);
+    try {
+      const res = await api.get(`/courses/${course.id}/detail`);
+      setCourseDetail(res.data);
+    } catch {
+      toast.error('Failed to load course detail');
+    } finally {
+      setDetailLoading(false);
     }
   };
 
-  const handleUpdateCourse = (id, updatedData) => {
-    setCourses(courses.map(c => c.id === id ? { ...c, ...updatedData } : c));
-    toast.success('Course updated');
+  const filteredCourses = courses.filter(c =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.code.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // ── Add course ──────────────────────────────────────────────────────────────
+  const handleAddCourse = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const slotsRaw = fd.get('slots') || '';
+    const slotsArr = slotsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    const payload = {
+      code: fd.get('code'),
+      name: fd.get('name'),
+      description: fd.get('description') || null,
+      slots: slotsArr,
+    };
+    try {
+      const res = await api.post('/courses', payload);
+      setCourses(prev => [...prev, res.data]);
+      setIsAddModalOpen(false);
+      e.target.reset();
+      toast.success('Course created');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to create course');
+    }
   };
+
+  // ── Edit course ─────────────────────────────────────────────────────────────
+  const handleEditCourse = async (e) => {
+    e.preventDefault();
+    if (!editingCourse) return;
+    const fd = new FormData(e.target);
+    const slotsRaw = fd.get('slots') || '';
+    const slotsArr = slotsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    const payload = {
+      name: fd.get('name'),
+      description: fd.get('description') || null,
+      slots: slotsArr,
+    };
+    try {
+      const res = await api.put(`/courses/${editingCourse.id}`, payload);
+      setCourses(prev => prev.map(c => c.id === editingCourse.id ? res.data : c));
+      setIsEditModalOpen(false);
+      setEditingCourse(null);
+      if (selectedCourse?.id === editingCourse.id) openDetail(res.data);
+      toast.success('Course updated');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update course');
+    }
+  };
+
+  // ── Delete course ───────────────────────────────────────────────────────────
+  const handleDeleteCourse = async (id) => {
+    if (!window.confirm('Delete this course? All sessions and records will be lost.')) return;
+    try {
+      await api.delete(`/courses/${id}`);
+      setCourses(prev => prev.filter(c => c.id !== id));
+      if (selectedCourse?.id === id) { setSelectedCourse(null); setCourseDetail(null); }
+      toast.success('Course deleted');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete course');
+    }
+  };
+
+  // ── Enroll student ──────────────────────────────────────────────────────────
+  const handleEnroll = async (studentId) => {
+    if (!selectedCourse) return;
+    try {
+      await api.post(`/courses/${selectedCourse.id}/enroll`, { student_id: studentId });
+      toast.success('Student enrolled');
+      openDetail(selectedCourse);
+      setEnrollPickerOpen(false);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to enroll student');
+    }
+  };
+
+  const handleUnenroll = async (studentId) => {
+    if (!selectedCourse) return;
+    if (!window.confirm('Remove this student from the course?')) return;
+    try {
+      await api.delete(`/courses/${selectedCourse.id}/enroll/${studentId}`);
+      toast.success('Student removed');
+      openDetail(selectedCourse);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to remove student');
+    }
+  };
+
+  // ── Derived stats ───────────────────────────────────────────────────────────
+  const totalStudents = courseDetail?.total_students ?? 0;
+  const avgAtt = courseDetail?.avg_attendance ?? 0;
+
+  // Students not yet enrolled in the selected course
+  const enrolledIds = new Set(courseDetail?.students?.map(s => s.id) ?? []);
+  const unenrolledStudents = students.filter(
+    s => !enrolledIds.has(s.id) &&
+         (s.name.toLowerCase().includes(enrollSearch.toLowerCase()) ||
+          (s.roll_no || '').toLowerCase().includes(enrollSearch.toLowerCase()))
+  );
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
-      <PageHeader 
-        title="Course Management" 
-        description="Oversee your academic modules, schedules, and student enrollment."
+      <PageHeader
+        title="Course Management"
+        description="Manage academic modules, schedules, and student enrollment."
         actions={
           <div className="flex gap-3">
-             <div className="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
-                <button 
-                  onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                  <LayoutGrid className="w-5 h-5" />
-                </button>
-                <button 
-                   onClick={() => setViewMode('list')}
-                   className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                  <List className="w-5 h-5" />
-                </button>
-             </div>
-             <Button variant="primary" icon={Plus} onClick={() => setIsAddModalOpen(true)}>
-               Add New Course
-             </Button>
+            <div className="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+              <button onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                <LayoutGrid className="w-5 h-5" />
+              </button>
+              <button onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                <List className="w-5 h-5" />
+              </button>
+            </div>
+            <Button variant="outline" icon={RefreshCw} onClick={fetchCourses} disabled={loading}>
+              Refresh
+            </Button>
+            <Button variant="primary" icon={Plus} onClick={() => setIsAddModalOpen(true)}>
+              Add Course
+            </Button>
           </div>
         }
       />
 
-      {/* Stats Quick Overview */}
+      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-5">
-           <div className="w-14 h-14 bg-blue-50/50 text-blue-600 rounded-2xl flex items-center justify-center shrink-0 border border-blue-50">
-             <BookOpen className="w-7 h-7" />
-           </div>
-           <div>
-             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Active Courses</p>
-             <p className="text-3xl font-semibold text-slate-900 mt-1 tracking-tight">{courses.length}</p>
-           </div>
-        </div>
-        <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-5">
-           <div className="w-14 h-14 bg-emerald-50/50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0 border border-emerald-50">
-             <Users className="w-7 h-7" />
-           </div>
-           <div>
-             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Enrolled Students</p>
-             <p className="text-3xl font-semibold text-slate-900 mt-1 tracking-tight">{courses.reduce((acc, c) => acc + c.students, 0)}</p>
-           </div>
-        </div>
-        <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-5">
-           <div className="w-14 h-14 bg-amber-50/50 text-amber-600 rounded-2xl flex items-center justify-center shrink-0 border border-amber-50">
-             <TrendingUp className="w-7 h-7" />
-           </div>
-           <div>
-             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Avg. Attendance</p>
-             <p className="text-3xl font-semibold text-slate-900 mt-1 tracking-tight">
-               {Math.round(courses.reduce((acc, c) => acc + c.attendance, 0) / courses.length)}%
-             </p>
-           </div>
+        <StatCard icon={BookOpen} label="Active Courses" value={courses.length} color="blue" />
+        <StatCard icon={Users} label="Total Enrolled"
+          value={courses.reduce((acc, c) => acc + (c._student_count ?? 0), 0)} color="emerald" />
+        <StatCard icon={TrendingUp} label="Avg Attendance" value="—" color="amber" />
+      </div>
+
+      {/* Search */}
+      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full sm:w-96">
+          <input type="text" placeholder="Search by name or code…"
+            value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm text-sm" />
+          <Search className="w-5 h-5 text-slate-400 absolute left-4 top-3" />
         </div>
       </div>
-      
-      {/* Requirement 5.5: Alert System - Low Attendance Courses */}
-      {courses.some(c => c.attendance < 80) && (
-        <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top duration-500">
-           <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center">
-                 <AlertCircle className="w-5 h-5" />
-              </div>
-              <div>
-                 <p className="text-sm font-bold text-rose-800">Low Engagement Warning</p>
-                 <p className="text-xs text-rose-600">One or more courses have fallen below the 80% attendance threshold.</p>
-              </div>
-           </div>
-           <Button variant="outline" size="sm" className="border-rose-200 text-rose-600 hover:bg-rose-100">Review At-Risk Students</Button>
+
+      {/* Loading */}
+      {loading && (
+        <div className="text-center py-20 text-slate-400 text-sm">Loading courses…</div>
+      )}
+
+      {/* Empty */}
+      {!loading && filteredCourses.length === 0 && (
+        <div className="text-center py-20">
+          <BookOpen className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+          <p className="text-slate-400 font-medium">No courses found.</p>
+          <p className="text-slate-300 text-sm mt-1">Create your first course to get started.</p>
         </div>
       )}
 
-
-      {/* Search & Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full sm:w-96">
-          <input 
-            type="text" 
-            placeholder="Search by course name or code..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm text-sm"
-          />
-          <Search className="w-5 h-5 text-slate-400 absolute left-4 top-3" />
-        </div>
-        <Button variant="outline" icon={Filter} className="w-full sm:w-auto">
-          Advanced Filters
-        </Button>
-      </div>
-
-      {/* Courses Display */}
-      {viewMode === 'grid' ? (
+      {/* Grid view */}
+      {!loading && viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCourses.map((course) => (
-            <div 
-              key={course.id} 
-              onClick={() => setSelectedCourse(course)}
-              className="group bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all cursor-pointer relative overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 p-6 flex gap-2">
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteCourse(course.id);
-                  }}
-                  className="text-slate-300 hover:text-red-500 transition-colors p-1"
-                >
-                  <XCircle className="w-5 h-5" />
+          {filteredCourses.map(course => (
+            <div key={course.id} onClick={() => openDetail(course)}
+              className="group bg-white rounded-[32px] border border-slate-100 p-6 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all cursor-pointer relative overflow-hidden">
+              <div className="absolute top-4 right-4 flex gap-1" onClick={e => e.stopPropagation()}>
+                <button onClick={() => { setEditingCourse(course); setIsEditModalOpen(true); }}
+                  className="p-2 rounded-xl text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors">
+                  <Edit2 className="w-4 h-4" />
                 </button>
-                <button className="text-slate-300 hover:text-slate-600 transition-colors p-1">
-                  <MoreVertical className="w-5 h-5" />
+                <button onClick={() => handleDeleteCourse(course.id)}
+                  className="p-2 rounded-xl text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-
-              <div className="flex items-center gap-4 mb-6">
+              <div className="flex items-center gap-4 mb-6 pr-16">
                 <div className="w-12 h-12 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
                   <BookOpen className="w-6 h-6" />
                 </div>
                 <div>
-                   <Badge variant="primary" className="mb-1">{course.code}</Badge>
-                   <h3 className="font-semibold text-slate-800 text-lg leading-tight group-hover:text-blue-600 transition-colors line-clamp-1">{course.name}</h3>
+                  <Badge variant="primary" className="mb-1">{course.code}</Badge>
+                  <h3 className="font-semibold text-slate-800 text-lg leading-tight group-hover:text-blue-600 transition-colors line-clamp-1">{course.name}</h3>
                 </div>
               </div>
-
-              <div className="space-y-4 mb-8">
-                <div className="flex items-center gap-3 text-slate-500 text-sm">
-                   <Clock3 className="w-4 h-4" />
-                   <span>{course.slots[0]}</span>
-                </div>
-                <div className="flex items-center gap-3 text-slate-500 text-sm">
-                   <Users className="w-4 h-4" />
-                   <span>{course.students} Registered Students</span>
-                </div>
+              <div className="space-y-3 mb-6">
+                {(course.slots || []).slice(0, 2).map((slot, i) => (
+                  <div key={i} className="flex items-center gap-3 text-slate-500 text-sm">
+                    <Clock3 className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{typeof slot === 'object' ? `${slot.day} ${slot.time}` : slot}</span>
+                  </div>
+                ))}
+                {!course.slots?.length && (
+                  <p className="text-xs text-slate-300 italic">No schedule set</p>
+                )}
               </div>
-
-              <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
-                 <div>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Weekly Attendance</p>
-                    <div className="flex items-center gap-2">
-                       <div className="w-24 h-1 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                             className={`h-full rounded-full ${course.attendance > 90 ? 'bg-emerald-500' : course.attendance > 80 ? 'bg-blue-500' : 'bg-amber-500'}`}
-                             style={{ width: `${course.attendance}%` }}
-                          />
-                       </div>
-                       <span className="text-sm font-semibold text-slate-700">{course.attendance}%</span>
-                    </div>
-                 </div>
-                 <div className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all transform group-hover:translate-x-1">
-                    <ArrowRight className="w-4 h-4" />
-                 </div>
+              <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
+                <p className="text-xs text-slate-400 font-semibold">{course.code}</p>
+                <div className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
               </div>
             </div>
           ))}
         </div>
-      ) : (
-        <Card noPadding>
-           <div className="overflow-x-auto w-full">
+      )}
+
+      {/* List view */}
+      {!loading && viewMode === 'list' && (
+        <Card noPadding className="border-slate-100 shadow-sm rounded-[28px] overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/50 border-y border-slate-100 text-[13px] font-semibold text-slate-500 uppercase tracking-widest leading-relaxed">
-                  <th className="px-6 py-4 font-semibold">Course Details</th>
-                  <th className="px-6 py-4 font-semibold">Schedule</th>
-                  <th className="px-6 py-4 font-semibold">Enrolled</th>
-                  <th className="px-6 py-4 font-semibold">Attendance</th>
-                  <th className="px-6 py-4 font-semibold text-right">Action</th>
+                <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  <th className="px-6 py-4">Course</th>
+                  <th className="px-6 py-4">Schedule</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {filteredCourses.map((course) => (
-                  <tr key={course.id} className="hover:bg-slate-50/80 transition-colors cursor-pointer" onClick={() => setSelectedCourse(course)}>
+              <tbody className="divide-y divide-slate-100">
+                {filteredCourses.map(course => (
+                  <tr key={course.id} className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                    onClick={() => openDetail(course)}>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold flex items-center justify-center shadow-sm border border-blue-100 shrink-0 uppercase">
+                        <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold flex items-center justify-center uppercase">
                           {course.code.split('-')[0]}
                         </div>
                         <div>
-                           <p className="font-semibold text-slate-800">{course.name}</p>
-                           <p className="text-xs text-slate-500 font-medium">{course.code}</p>
+                          <p className="font-semibold text-slate-800">{course.name}</p>
+                          <p className="text-xs text-slate-400 font-bold">{course.code}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                       <div className="flex flex-col gap-1">
-                          {course.slots.map((slot, i) => (
-                            <div key={i} className="flex items-center gap-2 text-slate-600 text-xs">
-                               <CalendarDays className="w-3 h-3 text-slate-400" />
-                               {slot}
-                            </div>
-                          ))}
-                       </div>
+                      {(course.slots || []).map((slot, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs text-slate-500">
+                          <CalendarDays className="w-3 h-3 text-slate-300" />
+                          {typeof slot === 'object' ? `${slot.day} ${slot.time}` : slot}
+                        </div>
+                      ))}
                     </td>
-                    <td className="px-6 py-4">
-                       <div className="flex items-center gap-2">
-                          <Users className="w-4 h-4 text-slate-400" />
-                          <span className="font-medium text-slate-700">{course.students}</span>
-                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                       <Badge variant={course.attendance > 85 ? 'success' : 'primary'}>{course.attendance}% Avg</Badge>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                       <Button variant="ghost" size="sm">Manage</Button>
+                    <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => { setEditingCourse(course); setIsEditModalOpen(true); }}
+                          className="text-xs font-bold text-blue-500 hover:text-blue-700">Edit</button>
+                        <button onClick={() => handleDeleteCourse(course.id)}
+                          className="text-xs font-bold text-rose-400 hover:text-rose-600">Delete</button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -295,174 +326,249 @@ export default function CourseDashboard() {
         </Card>
       )}
 
-      {/* Add Course Modal (Simplified for now) */}
+      {/* ── Add Course Modal ──────────────────────────────────────────────────── */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-           <div className="bg-white rounded-[32px] w-full max-w-lg shadow-2xl p-8 transform transition-all animate-in zoom-in duration-300">
-              <div className="flex justify-between items-center mb-8">
-                 <div>
-                    <h3 className="text-2xl font-semibold text-slate-900 tracking-tight">Create New Course</h3>
-                    <p className="text-slate-500 text-sm mt-1">Fill in the basic parameters for the new module.</p>
-                 </div>
-                 <button onClick={() => setIsAddModalOpen(false)} className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors">
-                    <XCircle className="w-6 h-6" />
-                 </button>
-              </div>
-
-              <form onSubmit={handleAddCourse} className="space-y-5">
-                 <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Course Name</label>
-                    <input name="name" required placeholder="e.g. Machine Learning" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 text-sm" />
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                       <label className="text-sm font-semibold text-slate-700">Course Code</label>
-                       <input name="code" required placeholder="CS-101" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all uppercase placeholder:text-slate-400 text-sm" />
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-sm font-semibold text-slate-700">Credit Hours</label>
-                       <input name="credits" type="number" defaultValue="3" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm" />
-                    </div>
-                 </div>
-                 <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Instructor Name</label>
-                    <input name="instructor" required placeholder="e.g. Dr. Usman Ali" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 text-sm" />
-                 </div>
-                 <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">Time Slots (Comma separated)</label>
-                    <input name="slots" required placeholder="Mon 10:00 AM, Wed 10:00 AM" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 text-sm" />
-                 </div>
-                 
-                 <div className="pt-4 flex gap-3">
-                    <Button type="button" variant="outline" className="flex-1" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-                    <Button type="submit" variant="primary" className="flex-1">Create Course</Button>
-                 </div>
-              </form>
-           </div>
-        </div>
+        <CourseFormModal
+          title="Create New Course"
+          onClose={() => setIsAddModalOpen(false)}
+          onSubmit={handleAddCourse}
+        />
       )}
 
-      {/* Course Detail Overlay (Simplified) */}
+      {/* ── Edit Course Modal ─────────────────────────────────────────────────── */}
+      {isEditModalOpen && editingCourse && (
+        <CourseFormModal
+          title="Edit Course"
+          initial={editingCourse}
+          onClose={() => { setIsEditModalOpen(false); setEditingCourse(null); }}
+          onSubmit={handleEditCourse}
+          readonlyCode
+        />
+      )}
+
+      {/* ── Course Detail Slide-over ──────────────────────────────────────────── */}
       {selectedCourse && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex justify-end">
-           <div className="bg-white w-full max-w-2xl h-full shadow-2xl flex flex-col transform transition-all animate-in slide-in-from-right duration-500">
-              <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-                 <div className="flex items-center gap-4">
-                    <button onClick={() => setSelectedCourse(null)} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-                       <XCircle className="w-6 h-6 text-slate-400" />
-                    </button>
-                    <div>
-                       <Badge variant="primary">{selectedCourse.code}</Badge>
-                       <h2 className="text-2xl font-semibold text-slate-900 tracking-tight">{selectedCourse.name}</h2>
-                    </div>
-                 </div>
-                 <Button variant="outline">Edit Course</Button>
+          <div className="bg-white w-full max-w-2xl h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            {/* Header */}
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button onClick={() => { setSelectedCourse(null); setCourseDetail(null); }}
+                  className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+                  <XCircle className="w-6 h-6 text-slate-400" />
+                </button>
+                <div>
+                  <Badge variant="primary">{selectedCourse.code}</Badge>
+                  <h2 className="text-2xl font-semibold text-slate-900 mt-1">{selectedCourse.name}</h2>
+                </div>
               </div>
+              <Button variant="outline" icon={Edit2} onClick={() => { setEditingCourse(selectedCourse); setIsEditModalOpen(true); }}>
+                Edit
+              </Button>
+            </div>
 
-              <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                 {/* Detail Stats */}
-                 <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Attendance</p>
-                       <p className={`text-2xl font-bold ${selectedCourse.attendance < 75 ? 'text-red-500' : 'text-emerald-600'}`}>{selectedCourse.attendance}%</p>
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-8 space-y-8">
+              {detailLoading ? (
+                <div className="text-center py-20 text-slate-400 text-sm">Loading detail…</div>
+              ) : courseDetail ? (
+                <>
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Students</p>
+                      <p className="text-2xl font-bold text-slate-800 mt-1">{courseDetail.total_students}</p>
                     </div>
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Late Rate</p>
-                       <p className="text-2xl font-bold text-blue-600">4%</p>
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Sessions</p>
+                      <p className="text-2xl font-bold text-slate-800 mt-1">{courseDetail.total_sessions}</p>
                     </div>
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Absence</p>
-                       <p className="text-2xl font-bold text-red-500">11%</p>
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Avg Attendance</p>
+                      <p className={`text-2xl font-bold mt-1 ${courseDetail.avg_attendance < 75 ? 'text-rose-500' : 'text-emerald-600'}`}>
+                        {courseDetail.avg_attendance}%
+                      </p>
                     </div>
-                 </div>
+                  </div>
 
-                 {/* Registered Students Section */}
-                 <div>
+                  {/* Enroll students */}
+                  <div>
                     <div className="flex items-center justify-between mb-4">
-                       <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                          <Users className="w-5 h-5 text-blue-500" />
-                          Registered Students
-                       </h3>
-                       <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{selectedCourse.students} Total</span>
+                      <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-blue-500" /> Enrolled Students
+                        <span className="text-xs text-slate-400 font-normal">({courseDetail.total_students})</span>
+                      </h3>
+                      <button onClick={() => setEnrollPickerOpen(true)}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                        <UserPlus className="w-3.5 h-3.5" /> Enroll Student
+                      </button>
                     </div>
-                    
-                    <div className="space-y-4">
-                       {/* Mock student list with detail metrics */}
-                       {[
-                         { id: '1', name: 'Ali Hamza', studentId: 'STU-001', attendance: 95, present: 19, absent: 1 },
-                         { id: '2', name: 'Ayesha Bibi', studentId: 'STU-014', attendance: 82, present: 16, absent: 4 },
-                         { id: '3', name: 'Zainab Ahmed', studentId: 'STU-022', attendance: 64, present: 12, absent: 8 },
-                       ].map(student => (
-                         <div key={student.id} className={`p-5 border rounded-2xl hover:border-blue-200 hover:bg-blue-50/5 transition-all group relative ${student.attendance < 75 ? 'border-red-100 bg-red-50/10' : 'border-slate-100'}`}>
-                            <div className="flex items-center justify-between mb-4">
-                               <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 font-bold flex items-center justify-center text-xs">
-                                     {student.name.substring(0,2).toUpperCase()}
-                                  </div>
-                                  <div>
-                                     <p className="font-semibold text-slate-800 text-[15px]">{student.name}</p>
-                                     <p className="text-xs text-slate-400 font-medium">{student.studentId}</p>
-                                  </div>
-                               </div>
-                               <Badge variant={student.attendance < 75 ? 'error' : student.attendance > 80 ? 'success' : 'warning'} className="font-bold">
-                                  {student.attendance}% Rate
-                               </Badge>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-3">
-                               <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-100/50 flex flex-col items-center justify-center">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Present</span>
-                                  <span className="text-lg font-bold text-emerald-600">{student.present}</span>
-                               </div>
-                               <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-100/50 flex flex-col items-center justify-center">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Absent</span>
-                                  <span className="text-lg font-bold text-red-500">{student.absent}</span>
-                               </div>
-                            </div>
-                         </div>
-                       ))}
-                    </div>
-                 </div>
 
-                 {/* Scheduling Detail */}
-                 <div className="bg-blue-600 rounded-3xl p-6 text-white overflow-hidden relative">
-                    <Calendar className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" />
-                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                       <Clock className="w-5 h-5" />
-                       Class Schedule
-                    </h3>
-                    <div className="space-y-3 relative z-10">
-                       {selectedCourse.slots.map((slot, i) => (
-                         <div key={i} className="flex items-center justify-between bg-white/10 backdrop-blur-md rounded-xl px-4 py-3 border border-white/10">
-                            <span className="font-medium">{slot.split(' ')[0]}</span>
-                            <span className="font-bold">{slot.split(' ').slice(1).join(' ')}</span>
-                         </div>
-                       ))}
+                    {/* Enroll picker */}
+                    {enrollPickerOpen && (
+                      <div className="mb-4 border border-blue-100 rounded-2xl p-4 bg-blue-50/30 space-y-3">
+                        <input type="text" placeholder="Search students to enroll…"
+                          value={enrollSearch} onChange={e => setEnrollSearch(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+                        <div className="max-h-40 overflow-y-auto space-y-1">
+                          {unenrolledStudents.slice(0, 20).map(s => (
+                            <button key={s.id} onClick={() => handleEnroll(s.id)}
+                              className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white text-left text-sm transition-colors">
+                              <span className="font-medium text-slate-800">{s.name}</span>
+                              <span className="text-xs text-slate-400">{s.roll_no}</span>
+                            </button>
+                          ))}
+                          {unenrolledStudents.length === 0 && (
+                            <p className="text-xs text-slate-400 text-center py-3">No matching students to enroll</p>
+                          )}
+                        </div>
+                        <button onClick={() => setEnrollPickerOpen(false)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      {courseDetail.students.length === 0 ? (
+                        <p className="text-sm text-slate-400 text-center py-6">No students enrolled yet.</p>
+                      ) : courseDetail.students.map(s => (
+                        <div key={s.id} className={`p-4 border rounded-2xl hover:border-blue-100 transition-all group ${s.attendance_pct < 75 && s.present + s.absent > 0 ? 'border-rose-100 bg-rose-50/20' : 'border-slate-100'}`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 font-bold flex items-center justify-center text-xs">
+                                {s.name.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-slate-800 text-sm">{s.name}</p>
+                                <p className="text-xs text-slate-400">{s.roll_no}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={s.attendance_pct < 75 ? 'error' : s.attendance_pct > 85 ? 'success' : 'warning'}>
+                                {s.attendance_pct}%
+                              </Badge>
+                              <button onClick={() => handleUnenroll(s.id)}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-rose-400 hover:bg-rose-50 transition-all">
+                                <UserMinus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-center">
+                            <div className="bg-slate-50 rounded-xl py-2 border border-slate-100">
+                              <p className="text-[9px] font-bold text-slate-400 uppercase">Present</p>
+                              <p className="text-base font-bold text-emerald-600">{s.present}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-xl py-2 border border-slate-100">
+                              <p className="text-[9px] font-bold text-slate-400 uppercase">Absent</p>
+                              <p className="text-base font-bold text-rose-500">{s.absent}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                 </div>
-              </div>
-              
-              <div className="p-8 border-t border-slate-100 bg-slate-50/50">
-                 <Button 
-                    variant="primary" 
-                    className="w-full py-4 text-base" 
-                    onClick={() => {
-                      toast.promise(
-                        new Promise(resolve => setTimeout(resolve, 1500)),
-                        {
-                          loading: 'Aggregating module metrics...',
-                          success: 'Module reports generated and sent to Registry.',
-                          error: 'Failed to generate reports.',
-                        }
-                      );
-                    }}
-                  >
-                     Send Module Reports
-                 </Button>
-              </div>
-           </div>
+                  </div>
+
+                  {/* Schedule */}
+                  {(courseDetail.slots || []).length > 0 && (
+                    <div className="bg-blue-600 rounded-3xl p-6 text-white overflow-hidden relative">
+                      <Calendar className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" />
+                      <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                        <Clock className="w-5 h-5" /> Class Schedule
+                      </h3>
+                      <div className="space-y-2 relative z-10">
+                        {courseDetail.slots.map((slot, i) => {
+                          const s = typeof slot === 'object' ? `${slot.day} ${slot.time}${slot.room ? ' · ' + slot.room : ''}` : slot;
+                          return (
+                            <div key={i} className="flex items-center justify-between bg-white/10 rounded-xl px-4 py-3 border border-white/10">
+                              <span className="font-medium">{s.split(' ')[0]}</span>
+                              <span className="font-bold">{s.split(' ').slice(1).join(' ')}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function StatCard({ icon: Icon, label, value, color }) {
+  const colorMap = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-50',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-50',
+    amber: 'bg-amber-50 text-amber-600 border-amber-50',
+  };
+  return (
+    <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-5">
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border ${colorMap[color]}`}>
+        <Icon className="w-7 h-7" />
+      </div>
+      <div>
+        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">{label}</p>
+        <p className="text-3xl font-semibold text-slate-900 mt-1 tracking-tight">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function CourseFormModal({ title, initial = null, onClose, onSubmit, readonlyCode = false }) {
+  const slotsStr = initial?.slots
+    ? initial.slots.map(s => typeof s === 'object' ? `${s.day} ${s.time}` : s).join(', ')
+    : '';
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-white rounded-[32px] w-full max-w-lg shadow-2xl p-8 animate-in zoom-in duration-200">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h3 className="text-2xl font-semibold text-slate-900 tracking-tight">{title}</h3>
+            <p className="text-slate-500 text-sm mt-1">Fill in the course details below.</p>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors">
+            <XCircle className="w-6 h-6" />
+          </button>
+        </div>
+        <form onSubmit={onSubmit} className="space-y-5">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">Course Name</label>
+            <input name="name" required defaultValue={initial?.name || ''}
+              placeholder="e.g. Machine Learning"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700">Course Code</label>
+              <input name="code" required defaultValue={initial?.code || ''}
+                readOnly={readonlyCode} placeholder="CS-101"
+                className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none uppercase text-sm ${readonlyCode ? 'opacity-50 cursor-not-allowed' : ''}`} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700">Description</label>
+              <input name="description" defaultValue={initial?.description || ''}
+                placeholder="Optional"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none text-sm" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">Time Slots (comma-separated)</label>
+            <input name="slots" defaultValue={slotsStr}
+              placeholder="Mon 10:00 AM, Wed 10:00 AM"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none text-sm" />
+          </div>
+          <div className="pt-4 flex gap-3">
+            <Button type="button" variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+            <Button type="submit" variant="primary" className="flex-1">
+              {initial ? 'Save Changes' : 'Create Course'}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

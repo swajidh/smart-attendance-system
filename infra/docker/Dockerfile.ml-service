@@ -1,0 +1,33 @@
+# ML service — runs head-pose estimation and face recognition in isolation.
+# Kept separate so it can run on a GPU node or be scaled independently.
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 gcc wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install ML-specific dependencies
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir \
+    fastapi>=0.109.0 \
+    uvicorn>=0.27.0 \
+    opencv-python-headless>=4.9.0 \
+    mediapipe>=0.10.9 \
+    numpy>=1.26.0 \
+    torch>=2.1.0 \
+    torchvision>=0.16.0 \
+    facenet-pytorch>=2.5.3
+
+# Copy only the ML package
+COPY ml/ ./ml/
+
+RUN adduser --disabled-password --gecos "" mluser && chown -R mluser /app
+USER mluser
+
+# Pre-download face_landmarker model at build time
+RUN python -c "from ml.head_pose import HEAD_POSE_READY; print('ML ready:', HEAD_POSE_READY)" || true
+
+EXPOSE 8001
+CMD ["python", "-m", "uvicorn", "ml.service:app", "--host", "0.0.0.0", "--port", "8001"]

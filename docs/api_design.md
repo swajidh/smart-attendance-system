@@ -1,7 +1,7 @@
 # Backend API Endpoint Reference
 
 > **For:** Backend Developers  
-> **Last Updated:** 2026-06-04  
+> **Last Updated:** 2026-06-18  
 > **Base URL:** `http://localhost:8000`  
 > **Framework:** FastAPI (Python 3.12)
 
@@ -80,7 +80,8 @@ WebSocket /api/v1/attendance/ws/detect
 **⚠️ Known Limitations:**
 - `status` field is randomly assigned (`Present` 70% / `Unknown` 30%)
 - `studentId` is randomly generated, NOT matched against stored embeddings
-- Frontend does NOT connect to this endpoint (uses client-side simulation instead)
+- Frontend `LiveClassroom.jsx` connects to `WS /api/v1/sessions/{id}/detect` (not yet implemented); this endpoint path differs from what the frontend expects
+- When the WebSocket connection fails, the frontend enters offline mode (camera only, no detection overlay)
 
 ---
 
@@ -137,7 +138,8 @@ WebSocket /api/v1/attendance/ws/detect
 | `POST` | `/api/v1/students/bulk-enroll` | Upload ZIP of student images for batch face enrollment | FEM-04 | Medium |
 
 **Notes for developer:**
-- Refactor existing `POST /enroll` to use real model instead of `np.random.rand(128)`
+- Refactor existing `POST /attendance/enroll` to use real model instead of `np.random.rand(128)`
+- Frontend currently calls `POST /students/{id}/enroll` — align route paths when implementing student routes
 - Store embeddings as vector column or BLOB in DB
 - Validate image quality before processing (blur check already in `ml_service.py`)
 - Keep `ml_service.py` as the service layer, add DB calls
@@ -193,7 +195,7 @@ WebSocket /api/v1/attendance/ws/detect
 
 **Priority:** 🟡 HIGH  
 **Dependencies:** UAM (auth), Database  
-**Note:** Frontend CRUD already exists in `CourseDashboard.jsx` (localStorage only) — backend just needs to mirror it
+**Note:** Frontend CRUD exists in `CourseDashboard.jsx` (`localStorage` only) — backend needs to mirror it
 
 | Method | Endpoint | Description | User Story | Priority |
 |--------|----------|-------------|-----------|----------|
@@ -206,44 +208,16 @@ WebSocket /api/v1/attendance/ws/detect
 
 ---
 
-## 📦 Required `requirements.txt` Updates
+## 📦 `requirements.txt` Status
 
-The current `requirements.txt` is missing packages needed for the above endpoints:
+`backend/requirements.txt` lists all planned dependencies (database, auth, ML, export, email). **Only the core framework and CV packages are actively used** by the three implemented endpoints:
 
-```
-# === EXISTING (keep as-is) ===
-fastapi>=0.109.0
-uvicorn>=0.27.0
-pydantic>=2.6.0
-pydantic-settings>=2.1.0
-websockets>=12.0
-opencv-python-headless>=4.9.0
-mediapipe>=0.10.9
-numpy>=1.26.0
-
-# === NEW: Database ===
-sqlalchemy>=2.0.25
-asyncpg>=0.29.0
-alembic>=1.13.1
-
-# === NEW: Authentication ===
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-python-multipart>=0.0.6
-
-# === NEW: ML Model (Face Recognition) ===
-torch>=2.1.0
-torchvision>=0.16.0
-facenet-pytorch>=2.5.3
-
-# === NEW: File Export ===
-reportlab>=4.1.0
-openpyxl>=3.1.2
-
-# === NEW: Email (for password reset & alerts) ===
-fastapi-mail>=1.4.1
-
-# === NEW: Utilities ===
-python-dotenv>=1.0.0
-aiofiles>=23.2.1
-```
+| Category | Listed in requirements.txt | Wired up in code |
+|----------|---------------------------|------------------|
+| FastAPI, uvicorn, pydantic, websockets | ✅ | ✅ |
+| opencv-python-headless, mediapipe, numpy | ✅ | ✅ (`ml_service.py`) |
+| sqlalchemy, asyncpg, alembic | ✅ | ❌ Not used yet |
+| python-jose, passlib, python-multipart | ✅ | ❌ Not used yet |
+| torch, torchvision, facenet-pytorch | ✅ | ❌ Not used yet (mock embeddings) |
+| reportlab, openpyxl, fastapi-mail | ✅ | ❌ Not used yet |
+| python-dotenv, aiofiles | ✅ | ❌ Not used yet |

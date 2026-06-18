@@ -17,9 +17,10 @@ export default function FaceEnrollment() {
   const [captureStep, setCaptureStep] = useState('form');
   const [currentStudent, setCurrentStudent] = useState(null);
 
-  // Bulk Upload Flow State: 'idle' -> 'uploading' -> 'review'
+  // Bulk Upload Flow State: 'idle' -> 'uploading'
   const [uploadState, setUploadState] = useState('idle');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [bulkResult, setBulkResult] = useState(null);
   const fileInputRef = useRef(null);
 
   const [searchParams] = useSearchParams();
@@ -41,7 +42,9 @@ export default function FaceEnrollment() {
   useEffect(() => {
     // If a specific student ID is passed to re-enroll and students list is loaded
     if (reEnrollId && studentsList.length > 0 && captureStep === 'form') {
-      const studentToReEnroll = studentsList.find(s => s.id === reEnrollId || s.studentId === reEnrollId);
+      const studentToReEnroll = studentsList.find(
+        s => s.id === reEnrollId || s.student_id === reEnrollId
+      );
       if (studentToReEnroll) {
         setCurrentStudent(studentToReEnroll);
         setCaptureStep('active_camera');
@@ -56,105 +59,87 @@ export default function FaceEnrollment() {
       const res = await api.get('/students');
       setStudentsList(res.data);
     } catch (error) {
-      console.warn("API not ready, using local storage for face enrollment");
-      const saved = localStorage.getItem('smart_attendance_enrolled_students');
-      if (saved) {
-        try { setStudentsList(JSON.parse(saved)); } catch (e) { setStudentsList([]); }
-      }
+      console.error("Failed to fetch students:", error);
+      setStudentsList([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const filteredStudents = studentsList.filter(student => 
-    student.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (student.studentId && student.studentId.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (student.rollNo && student.rollNo.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (student.courseCode && student.courseCode.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredStudents = studentsList.filter(student => {
+    const q = searchQuery.toLowerCase();
+    return (
+      student.name?.toLowerCase().includes(q) ||
+      student.student_id?.toLowerCase().includes(q) ||
+      student.roll_no?.toLowerCase().includes(q) ||
+      student.department?.toLowerCase().includes(q)
+    );
+  });
 
-  const handleRegistrationSubmit = (formData) => {
-    setCurrentStudent(formData);
+  const handleRegistrationSubmit = (createdStudent) => {
+    // createdStudent is the DB response from POST /students (has real UUID id)
+    setCurrentStudent(createdStudent);
     setCaptureStep('active_camera');
+    fetchStudents();
   };
 
-  const handleFileSelect = (e) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const isMultiple = files.length > 1;
-      const fileLabel = isMultiple ? `${files.length} images/files selected` : files[0].name;
-      
-      setSelectedFile({ name: fileLabel });
-      setUploadState('uploading');
-      
-      setTimeout(() => {
-        setUploadState('review');
-      }, 3000);
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setSelectedFile({ name: file.name });
+    setUploadState('uploading');
+    setBulkResult(null);
+
+    if (file.name.endsWith('.csv')) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await api.post('/students/bulk-import', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        setBulkResult(res.data);
+        toast.success(`Imported ${res.data.imported} students`);
+        fetchStudents();
+      } catch (err) {
+        const msg = err.response?.data?.detail || 'Bulk import failed';
+        toast.error(msg);
+        setUploadState('idle');
+      }
+    } else {
+      toast.error('Only .csv files are supported for bulk import. Use webcam capture for individual enrollment.');
+      setUploadState('idle');
     }
   };
 
   const completeEnrollment = async (images) => {
-    const loadingToast = toast.loading(`Initializing Enrollment for ${currentStudent?.name}...`);
-    
+    const loadingToast = toast.loading(`Enrolling ${currentStudent?.name}...`);
     try {
-      // API call to enroll face embeddings
-      // Mocking pipeline delays for smooth UI flow before API is done
-      await new Promise(resolve => setTimeout(resolve, 1200));
-      toast.loading("Preprocessing images (160x160 normalization)...", { id: loadingToast });
-
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      if (Math.random() < 0.05) {
-         throw new Error("Quality check failed: 3 frames were too blurry. Please retry.");
-      }
-      toast.loading("Applying Laplacian Variance check & face validation...", { id: loadingToast });
-
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      toast.loading("Generating 128-dimensional face embeddings...", { id: loadingToast });
-
-      // Attempt actual API call
-      try {
-        await api.post(`/students/${currentStudent.id || currentStudent.studentId}/enroll`, { images });
-        toast.success(`${currentStudent?.name} successfully enrolled via API!`, { id: loadingToast });
-        fetchStudents();
-      } catch (err) {
-        // Fallback to local storage update
-        const updatedList = studentsList.map(s => {
-           if (s.id === currentStudent.id || s.studentId === currentStudent.studentId) {
-             return {
-               ...s,
-               embeddings: 'Active',
-               lastEnrollment: new Date().toISOString()
-             };
-           }
-           return s;
-        });
-
-        // If it was a totally new manual registration not in list yet
-        if (!updatedList.some(s => s.id === currentStudent.id || s.studentId === currentStudent.studentId)) {
-          updatedList.unshift({
-            id: Math.random().toString(36).substr(2, 9),
-            name: currentStudent.name,
-            studentId: currentStudent.studentId,
-            rollNo: currentStudent.rollNo,
-            courseCode: currentStudent.courseCode,
-            department: currentStudent.department,
-            status: 'Enrolled',
-            embeddings: 'Active',
-            lastEnrollment: new Date().toISOString(),
-            attendance: '0%',
-            image: currentStudent.name.substring(0,2).toUpperCase()
-          });
+      const res = await api.post(
+        `/students/${currentStudent.id}/enroll-face`,
+        { images }
+      );
+      const data = res.data;
+      if (data.status === 'error') {
+        toast.error(data.message, { id: loadingToast });
+        if (data.errors?.length) {
+          data.errors.slice(0, 3).forEach(e => toast.error(e));
         }
-        
-        setStudentsList(updatedList);
-        localStorage.setItem('smart_attendance_enrolled_students', JSON.stringify(updatedList));
-        toast.success(`${currentStudent?.name} successfully enrolled locally!`, { id: loadingToast });
+        return;
       }
-
+      toast.success(
+        `${currentStudent?.name} enrolled! ${data.samples_accepted} samples accepted.`,
+        { id: loadingToast }
+      );
+      if (data.samples_rejected > 0) {
+        toast(`${data.samples_rejected} frames rejected (quality checks).`, { icon: '⚠️' });
+      }
       setCaptureStep('form');
       setCurrentStudent(null);
+      fetchStudents();
     } catch (error) {
-      toast.error(error.message || "Enrollment failed. Face detection lost.", { id: loadingToast });
+      const msg = error.response?.data?.detail || error.message || 'Enrollment failed';
+      toast.error(msg, { id: loadingToast });
     }
   };
 
@@ -187,7 +172,7 @@ export default function FaceEnrollment() {
            <div>
              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Enrollment Rate</p>
              <p className="text-3xl font-semibold text-slate-900 mt-1 tracking-tight">
-               {studentsList.length > 0 ? Math.round((studentsList.filter(s => s.embeddings === 'Active' || s.embeddings === 'Generated').length / studentsList.length) * 100) : 0}%
+               {studentsList.length > 0 ? Math.round((studentsList.filter(s => s.embedding_status === 'enrolled').length / studentsList.length) * 100) : 0}%
              </p>
            </div>
         </div>
@@ -220,7 +205,7 @@ export default function FaceEnrollment() {
                 <div className="w-full flex justify-center py-6">
                    <StudentRegistrationForm 
                      onSubmit={handleRegistrationSubmit} 
-                     existingIds={studentsList.map(s => s.studentId)}
+                     existingIds={studentsList.map(s => s.student_id)}
                    />
                 </div>
               )}
@@ -259,8 +244,7 @@ export default function FaceEnrollment() {
                     <>
                       <input 
                         type="file" 
-                        accept=".zip,.rar,.7z,.jpg,.jpeg,.png" 
-                        multiple
+                        accept=".csv"
                         className="hidden" 
                         ref={fileInputRef}
                         onChange={handleFileSelect}
@@ -272,9 +256,9 @@ export default function FaceEnrollment() {
                         <div className="w-16 h-16 bg-slate-50 border border-slate-100 text-slate-400 rounded-full flex items-center justify-center group-hover:text-[#1E5BF0] group-hover:bg-white group-hover:border-blue-100 group-hover:shadow-md transition-all mb-5">
                           <UploadCloud className="w-7 h-7" />
                         </div>
-                        <h3 className="font-bold text-slate-800 mb-2 text-xl">Upload Class Batch</h3>
+                        <h3 className="font-bold text-slate-800 mb-2 text-xl">Bulk Import Students</h3>
                         <p className="text-slate-500 text-[14px] leading-relaxed mb-8 max-w-[280px]">
-                          Upload high-quality <span className="font-medium text-slate-700">.JPG / .PNG</span> images directly, or a <span className="font-medium text-slate-700">.ZIP</span> folder mapped to Student IDs.
+                          Upload a <span className="font-medium text-slate-700">.CSV</span> file with columns: <span className="font-medium text-slate-700">name, roll_no, student_id, email, department</span>
                         </p>
                         <Button variant="secondary" className="pointer-events-none">
                           Browse Local Files
@@ -283,85 +267,55 @@ export default function FaceEnrollment() {
                     </>
                   )}
 
-                  {uploadState === 'uploading' && (
+                  {uploadState === 'uploading' && !bulkResult && (
                     <div className="bg-white rounded-3xl p-12 border border-slate-100 shadow-sm flex flex-col items-center">
                       <div className="w-16 h-16 bg-blue-50 text-[#1E5BF0] rounded-full flex items-center justify-center mb-6 relative">
                         <Loader2 className="w-8 h-8 animate-spin" />
                       </div>
-                      <h3 className="font-bold text-slate-800 mb-2 text-lg">Extracting & Processing...</h3>
+                      <h3 className="font-bold text-slate-800 mb-2 text-lg">Importing Students...</h3>
                       <p className="text-slate-500 text-sm mb-6 truncate max-w-[250px]">
-                        {selectedFile?.name || 'batch-upload.zip'}
+                        {selectedFile?.name || 'students.csv'}
                       </p>
-                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden mb-2">
-                         <div className="bg-[#1E5BF0] h-2 rounded-full animate-[progress_3s_ease-in-out_forwards]"></div>
-                      </div>
-                      <p className="text-slate-400 text-xs text-left w-full">Preserving raw image quality for embeddings</p>
                     </div>
                   )}
 
-                  {uploadState === 'review' && (
+                  {uploadState === 'uploading' && bulkResult && (
                     <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm text-left">
                       <div className="flex items-center gap-4 border-b border-slate-100 pb-5 mb-5">
                         <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
                            <FileArchive className="w-6 h-6" />
                         </div>
                         <div>
-                          <h3 className="font-bold text-slate-800 text-lg">Batch Processed</h3>
-                          <p className="text-slate-500 text-sm">{selectedFile?.name} • 14MB</p>
+                          <h3 className="font-bold text-slate-800 text-lg">Import Complete</h3>
+                          <p className="text-slate-500 text-sm">{selectedFile?.name}</p>
                         </div>
                       </div>
 
-                      <div className="space-y-4 mb-8">
+                      <div className="space-y-3 mb-6">
                         <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                           <div className="flex items-center gap-3">
                             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                            <span className="text-sm font-medium text-slate-700">Valid Dirs (Matched IDs)</span>
+                            <span className="text-sm font-medium text-slate-700">Students Imported</span>
                           </div>
-                          <span className="font-bold text-slate-900">24</span>
+                          <span className="font-bold text-slate-900">{bulkResult.imported}</span>
                         </div>
-                        <div className="flex items-center justify-between p-3 bg-red-50/50 border border-red-100 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <AlertCircle className="w-4 h-4 text-red-500" />
-                            <span className="text-sm font-medium text-slate-700">Invalid Dirs / No Faces</span>
+                        {bulkResult.skipped > 0 && (
+                          <div className="flex items-center justify-between p-3 bg-amber-50/50 border border-amber-100 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <AlertCircle className="w-4 h-4 text-amber-500" />
+                              <span className="text-sm font-medium text-slate-700">Skipped / Duplicates</span>
+                            </div>
+                            <span className="font-bold text-amber-600">{bulkResult.skipped}</span>
                           </div>
-                          <span className="font-bold text-red-600">2</span>
-                        </div>
-                        
-                        <div className="pl-4 border-l-2 border-red-200 ml-4 space-y-1">
-                           <p className="text-xs text-slate-500"><span className="font-medium text-slate-700">STU-XYZ/</span> - No faces detected in images</p>
-                           <p className="text-xs text-slate-500"><span className="font-medium text-slate-700">Unknown_Folder/</span> - ID not recognized in DB</p>
-                        </div>
+                        )}
+                        {bulkResult.errors?.slice(0, 3).map((err, i) => (
+                          <p key={i} className="text-xs text-red-500 pl-4 border-l-2 border-red-200">{err}</p>
+                        ))}
                       </div>
 
                       <div className="flex gap-3">
-                        <Button variant="outline" className="flex-1" onClick={() => setUploadState('idle')}>Upload Another</Button>
-                        <Button variant="primary" className="flex-1 border border-blue-600" onClick={async () => {
-                          try {
-                            await api.post('/students/bulk-enroll', { file: selectedFile });
-                            toast.success('Successfully synchronized 24 student embeddings from bulk upload via API!');
-                            fetchStudents();
-                          } catch (err) {
-                            const mockBulk = Array.from({ length: 24 }).map((_, i) => ({
-                              id: Math.random().toString(36).substr(2, 9),
-                              name: `Batch Student ${i+1}`,
-                              studentId: `STU-1${(i+1).toString().padStart(2, '0')}`,
-                              rollNo: `CS-21-1${(i+1).toString().padStart(2, '0')}`,
-                              courseCode: 'CS-402',
-                              department: 'Computer Science',
-                              status: 'Enrolled',
-                              embeddings: 'Generated',
-                              attendance: '-',
-                              image: 'BS'
-                            }));
-                            const updatedList = [...mockBulk, ...studentsList];
-                            setStudentsList(updatedList);
-                            localStorage.setItem('smart_attendance_enrolled_students', JSON.stringify(updatedList));
-                            toast.success('Successfully synchronized 24 student embeddings locally!');
-                          }
-                          setUploadState('idle');
-                          setActiveTab('webcam');
-                          setCaptureStep('form');
-                        }}>Sync 24 Embeddings</Button>
+                        <Button variant="outline" className="flex-1" onClick={() => { setUploadState('idle'); setBulkResult(null); }}>Upload Another</Button>
+                        <Button variant="primary" className="flex-1" onClick={() => { setUploadState('idle'); setBulkResult(null); setActiveTab('webcam'); fetchStudents(); }}>Done</Button>
                       </div>
                     </div>
                   )}
@@ -454,22 +408,24 @@ export default function FaceEnrollment() {
                       <span className="font-semibold text-slate-800">{student.name}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-slate-600 font-medium">{student.studentId}</td>
-                  <td className="px-6 py-4 text-slate-600">{student.rollNo}</td>
+                  <td className="px-6 py-4 text-slate-600 font-medium">{student.student_id}</td>
+                  <td className="px-6 py-4 text-slate-600">{student.roll_no}</td>
                   <td className="px-6 py-4 text-center">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200 uppercase tracking-tight">
-                       {student.courseCode || student.courseId || 'N/A'}
+                       {student.department || 'N/A'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-slate-600 capitalize">{student.department || 'Unknown'}</td>
                   <td className="px-6 py-4">
-                     <Badge variant="success">Enrolled</Badge>
+                     <Badge variant={student.embedding_status === 'enrolled' ? 'success' : 'warning'}>
+                       {student.embedding_status === 'enrolled' ? 'Enrolled' : 'Pending'}
+                     </Badge>
                   </td>
                   <td className="px-6 py-4">
-                     <Badge variant="primary">{student.embeddings}</Badge>
+                     <Badge variant="primary">{student.embedding_status}</Badge>
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                     {student.attendance}
+                     {student.enrollment_samples > 0 ? `${student.enrollment_samples} samples` : '—'}
                   </td>
                 </tr>
               ))}

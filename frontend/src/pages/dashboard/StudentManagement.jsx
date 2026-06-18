@@ -41,7 +41,6 @@ export default function StudentManagement() {
   });
 
   const [courses, setCourses] = useState([]);
-  const [attendanceLogs, setAttendanceLogs] = useState([]);
 
   useEffect(() => {
     fetchData();
@@ -50,133 +49,52 @@ export default function StudentManagement() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Try fetching from API first
-      const [studentsRes, coursesRes, logsRes] = await Promise.all([
+      const [studentsRes, coursesRes] = await Promise.all([
         api.get('/students').catch(() => null),
         api.get('/courses').catch(() => null),
-        api.get('/sessions').catch(() => null)
       ]);
-
-      if (studentsRes) {
-        setStudents(studentsRes.data);
-      } else {
-        loadStudentsFromLocal();
-      }
-
-      if (coursesRes) {
-        setCourses(coursesRes.data);
-      } else {
-        loadCoursesFromLocal();
-      }
-
-      if (logsRes) {
-        setAttendanceLogs(logsRes.data);
-      } else {
-        loadLogsFromLocal();
-      }
+      setStudents(studentsRes?.data ?? []);
+      setCourses(coursesRes?.data ?? []);
     } catch (error) {
-      console.warn("API not ready, falling back to local storage");
-      loadStudentsFromLocal();
-      loadCoursesFromLocal();
-      loadLogsFromLocal();
+      console.error("Failed to fetch data:", error);
+      setStudents([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadStudentsFromLocal = () => {
-    const saved = localStorage.getItem('smart_attendance_enrolled_students');
-    if (saved) {
-      try { setStudents(JSON.parse(saved)); } catch (e) { setStudents([]); }
-    }
-  };
-
-  const loadCoursesFromLocal = () => {
-    const saved = localStorage.getItem('smart_attendance_courses');
-    if (saved) {
-      try { setCourses(JSON.parse(saved)); } catch (e) { setCourses([]); }
-    }
-  };
-
-  const loadLogsFromLocal = () => {
-    const saved = localStorage.getItem('smart_attendance_session_logs');
-    if (saved) {
-      try { setAttendanceLogs(JSON.parse(saved)); } catch (e) { setAttendanceLogs([]); }
-    }
-  };
-
-  const calculateAttendance = (studentId) => {
-    const studentLogs = attendanceLogs.filter(log => 
-      log.roster && log.roster.some(s => s.id === studentId)
-    );
-    
-    if (studentLogs.length === 0) return 0;
-    
-    const presentCount = studentLogs.filter(log => 
-      log.roster.find(s => s.id === studentId)?.status === 'Present'
-    ).length;
-    
-    return Math.round((presentCount / studentLogs.length) * 100);
-  };
-
-  const saveStudentsLocal = (updatedList) => {
-    setStudents(updatedList);
-    localStorage.setItem('smart_attendance_enrolled_students', JSON.stringify(updatedList));
-  };
-
-  const isRollNoUnique = (rollNo, excludeId = null) => {
-    return !students.some(s => s.rollNo.toLowerCase() === rollNo.toLowerCase() && s.id !== excludeId);
-  };
-
-  const validateEmail = (email) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
-
-  const validateRollNo = (rollNo) => {
-    return /^[a-zA-Z0-9-]+$/.test(rollNo);
-  };
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const validateRollNo = (rollNo) => /^[a-zA-Z0-9-]+$/.test(rollNo);
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
-    
+
     if (!newStudent.name || !newStudent.rollNo || !newStudent.email || !newStudent.courseId) {
       toast.error("Please fill all required fields");
       return;
     }
-
     if (!validateEmail(newStudent.email)) {
       toast.error("Invalid email format");
       return;
     }
-
     if (!validateRollNo(newStudent.rollNo)) {
       toast.error("Invalid roll number format (use alphanumeric and hyphens)");
       return;
     }
 
-    if (!isRollNoUnique(newStudent.rollNo)) {
-      toast.error(`Roll number ${newStudent.rollNo} already exists!`);
-      return;
-    }
-
     try {
-      // Attempt API first
-      await api.post('/students', newStudent);
-      toast.success("Student created via API");
-      fetchData(); // reload from API
+      await api.post('/students', {
+        name: newStudent.name,
+        roll_no: newStudent.rollNo,
+        student_id: `STU-${newStudent.rollNo.toUpperCase()}`,
+        email: newStudent.email,
+        department: newStudent.department,
+      });
+      toast.success("Student created successfully");
+      fetchData();
     } catch (error) {
-      // Fallback to local storage
-      const studentToAdd = {
-        ...newStudent,
-        id: Math.random().toString(36).substr(2, 9),
-        studentId: `STU-${newStudent.rollNo}`,
-        status: 'Pending Enrollment',
-        embeddings: 'Pending',
-        attendance: '0%',
-        image: newStudent.name.substring(0, 2).toUpperCase()
-      };
-      saveStudentsLocal([studentToAdd, ...students]);
-      toast.success("Student record created locally (fallback)!");
+      const msg = error.response?.data?.detail || 'Failed to create student';
+      toast.error(msg);
     }
 
     setNewStudent({ name: '', rollNo: '', email: '', courseId: '', department: 'computer' });
@@ -186,83 +104,25 @@ export default function StudentManagement() {
   const handleCSVUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     if (!file.name.endsWith('.csv')) {
       toast.error("Please upload a CSV file");
+      e.target.value = '';
       return;
     }
 
+    const formData = new FormData();
+    formData.append('file', file);
     try {
-       const formData = new FormData();
-       formData.append('file', file);
-       const res = await api.post('/students/bulk-import', formData);
-       toast.success(`API Import: ${res.data.imported} students imported`);
-       fetchData();
+      const res = await api.post('/students/bulk-import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const { imported, skipped, errors } = res.data;
+      toast.success(`Imported ${imported} students${skipped > 0 ? `, ${skipped} skipped` : ''}`);
+      if (errors?.length) setBulkUploadError(errors);
+      fetchData();
     } catch (error) {
-       console.warn("API bulk import failed, using local parser");
-       // Local Parsing Fallback
-       const reader = new FileReader();
-       reader.onload = (event) => {
-         const content = event.target.result;
-         const lines = content.split('\n');
-         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-         
-         const newEntries = [];
-         const errors = [];
-
-         for (let i = 1; i < lines.length; i++) {
-           if (!lines[i].trim()) continue;
-           
-           const values = lines[i].split(',').map(v => v.trim());
-           const entry = {};
-           
-           headers.forEach((header, index) => {
-             if (header === 'name') entry.name = values[index];
-             if (header === 'rollno') entry.rollNo = values[index];
-             if (header === 'email') entry.email = values[index];
-             if (header === 'courseid') entry.courseId = values[index];
-           });
-
-           if (!entry.name || !entry.rollNo || !entry.email || !entry.courseId) {
-             errors.push(`Row ${i + 1}: Missing required fields`);
-             continue;
-           }
-
-           if (!isRollNoUnique(entry.rollNo) && !newEntries.some(e => e.rollNo === entry.rollNo)) {
-             errors.push(`Row ${i + 1}: Roll number ${entry.rollNo} is a duplicate`);
-             continue;
-           }
-
-           if (newEntries.some(e => e.rollNo === entry.rollNo)) {
-              errors.push(`Row ${i + 1}: Roll number ${entry.rollNo} repeated in file`);
-              continue;
-           }
-
-           newEntries.push({
-             ...entry,
-             id: Math.random().toString(36).substr(2, 9),
-             studentId: `STU-${entry.rollNo}`,
-             department: 'computer',
-             status: 'Enrolled',
-             embeddings: 'Pending',
-             attendance: '0%',
-             image: entry.name.substring(0, 2).toUpperCase()
-           });
-         }
-
-         if (errors.length > 0) {
-           setBulkUploadError(errors);
-           toast.error(`Found ${errors.length} errors in CSV`);
-         } else {
-           setBulkUploadError(null);
-         }
-
-         if (newEntries.length > 0) {
-           saveStudentsLocal([...newEntries, ...students]);
-           toast.success(`Successfully imported ${newEntries.length} students locally`);
-         }
-       };
-       reader.readAsText(file);
+      const msg = error.response?.data?.detail || 'Bulk import failed';
+      toast.error(msg);
     }
     e.target.value = '';
   };
@@ -271,11 +131,11 @@ export default function StudentManagement() {
     if (window.confirm("Are you sure you want to remove this student?")) {
       try {
         await api.delete(`/students/${id}`);
-        toast.success("Student removed via API");
+        toast.success("Student removed");
         fetchData();
       } catch (error) {
-        saveStudentsLocal(students.filter(s => s.id !== id));
-        toast.success("Student removed locally (fallback)");
+        const msg = error.response?.data?.detail || 'Failed to delete student';
+        toast.error(msg);
       }
     }
   };
@@ -285,12 +145,16 @@ export default function StudentManagement() {
     navigate(`/dashboard/enrollment?student=${studentId}`);
   };
 
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.rollNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (s.courseId && s.courseId.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredStudents = students.filter(s => {
+    const q = searchQuery.toLowerCase();
+    return (
+      s.name?.toLowerCase().includes(q) ||
+      s.roll_no?.toLowerCase().includes(q) ||
+      s.student_id?.toLowerCase().includes(q) ||
+      s.email?.toLowerCase().includes(q) ||
+      s.department?.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto pb-10">
@@ -303,7 +167,7 @@ export default function StudentManagement() {
               variant="outline" 
               icon={Download} 
               onClick={() => {
-                const csvContent = "data:text/csv;charset=utf-8,name,rollNo,email,courseId\nJohn Doe,CS-21-001,john@example.com,CS-402";
+                const csvContent = "data:text/csv;charset=utf-8,name,roll_no,student_id,email,department\nJohn Doe,CS-21-001,STU-CS-21-001,john@example.com,Computer Science";
                 const encodedUri = encodeURI(csvContent);
                 const link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
@@ -394,7 +258,7 @@ export default function StudentManagement() {
                     <th className="px-6 py-4">Email Address</th>
                     <th className="px-6 py-4">Course ID</th>
                     <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Attendance</th>
+                    <th className="px-6 py-4">Enrolled Date</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -410,21 +274,29 @@ export default function StudentManagement() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-[11px] border border-blue-100">
-                            {student.image || student.name?.substring(0,2).toUpperCase()}
+                            {student.name?.substring(0, 2).toUpperCase()}
                           </div>
-                          <span className="font-bold text-slate-800 text-sm">{student.name}</span>
+                          <div>
+                            <span className="font-bold text-slate-800 text-sm">{student.name}</span>
+                            <p className="text-xs text-slate-400">{student.student_id}</p>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-600">{student.rollNo}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-slate-600">{student.roll_no}</td>
                       <td className="px-6 py-4 text-sm text-slate-500">{student.email}</td>
                       <td className="px-6 py-4">
-                        <Badge variant="primary" className="uppercase">{student.courseId || 'Unassigned'}</Badge>
+                        <Badge variant="primary" className="uppercase">{student.department || 'N/A'}</Badge>
                       </td>
                       <td className="px-6 py-4">
-                        {student.embeddings === 'Active' || student.embeddings === 'Generated' ? (
+                        {student.embedding_status === 'enrolled' ? (
                           <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            Active
+                            Enrolled ({student.enrollment_samples} samples)
+                          </div>
+                        ) : student.embedding_status === 'failed' ? (
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-red-500">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Failed
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5 text-xs font-bold text-amber-500">
@@ -433,19 +305,10 @@ export default function StudentManagement() {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                           <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase">
-                              <span>Rate</span>
-                              <span>{calculateAttendance(student.studentId)}%</span>
-                           </div>
-                           <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full ${calculateAttendance(student.studentId) > 80 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                style={{ width: `${calculateAttendance(student.studentId)}%` }}
-                              />
-                           </div>
-                        </div>
+                      <td className="px-6 py-4 text-sm text-slate-500">
+                        {student.enrollment_date
+                          ? new Date(student.enrollment_date).toLocaleDateString()
+                          : '—'}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -1,9 +1,10 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
-import { Camera, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Camera, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import toast from 'react-hot-toast';
+import api from '../../services/api';
 
 export default function WebcamCapture({ onCaptureComplete, onCancel }) {
   const webcamRef = useRef(null);
@@ -11,6 +12,7 @@ export default function WebcamCapture({ onCaptureComplete, onCancel }) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [cameraError, setCameraError] = useState(false);
   const [realtimeWarning, setRealtimeWarning] = useState(null);
+  const [isCheckingQuality, setIsCheckingQuality] = useState(false);
 
   const TARGET_SAMPLES = 15;
   const guides = [
@@ -31,48 +33,61 @@ export default function WebcamCapture({ onCaptureComplete, onCancel }) {
     "Hold still for calibration"
   ];
 
-  // Simulate real-time video feed analysis (Lighting / Blur)
+  // Real-time quality polling — check every 2.5s while camera is live
   useEffect(() => {
     if (cameraError || capturedImages.length >= TARGET_SAMPLES) return;
-    
-    const interval = setInterval(() => {
-      const rand = Math.random();
-      if (rand < 0.1) {
-        setRealtimeWarning("Low Lighting Detected");
-      } else if (rand > 0.1 && rand < 0.15) {
-        setRealtimeWarning("Slight Motion Blur");
-      } else if (rand > 0.15 && rand < 0.2) {
-        setRealtimeWarning("Face not centered");
-      } else {
-        setRealtimeWarning(null); // Good quality
+
+    const interval = setInterval(async () => {
+      if (!webcamRef.current || isCheckingQuality) return;
+      const frame = webcamRef.current.getScreenshot();
+      if (!frame) return;
+
+      try {
+        setIsCheckingQuality(true);
+        const res = await api.post('/students/validate-frame', { image: frame });
+        const { quality, message } = res.data;
+        if (quality === 'ok' || quality === 'multiple_faces') {
+          setRealtimeWarning(quality === 'multiple_faces' ? message : null);
+        } else {
+          setRealtimeWarning(message);
+        }
+      } catch {
+        // silently ignore — don't surface network errors during live feed
+        setRealtimeWarning(null);
+      } finally {
+        setIsCheckingQuality(false);
       }
-    }, 2000);
+    }, 2500);
 
     return () => clearInterval(interval);
-  }, [cameraError, capturedImages.length]);
+  }, [cameraError, capturedImages.length, isCheckingQuality]);
 
-  const capture = useCallback(() => {
-    if (capturedImages.length >= TARGET_SAMPLES) return;
+  const capture = useCallback(async () => {
+    if (capturedImages.length >= TARGET_SAMPLES || !webcamRef.current) return;
+
+    const imageSrc = webcamRef.current.getScreenshot();
+    if (!imageSrc) return;
 
     if (realtimeWarning) {
       toast.error(`Cannot capture: ${realtimeWarning}. Please adjust.`);
       return;
     }
 
-    const imageSrc = webcamRef.current.getScreenshot();
-    
-    if (imageSrc) {
-      const faceDetected = Math.random() > 0.05; // 95% detection success rate
-      
-      if (!faceDetected) {
-        toast.error("Face not detected. Please reposition.");
+    // Final quality check on this exact frame before accepting
+    try {
+      const res = await api.post('/students/validate-frame', { image: imageSrc });
+      const { quality, message } = res.data;
+      if (quality !== 'ok') {
+        toast.error(`Frame rejected: ${message}`);
         return;
       }
-
-      setIsCapturing(true);
-      setCapturedImages((prev) => [...prev, imageSrc]);
-      setTimeout(() => setIsCapturing(false), 150);
+    } catch {
+      // If quality check endpoint is down, allow capture anyway
     }
+
+    setIsCapturing(true);
+    setCapturedImages(prev => [...prev, imageSrc]);
+    setTimeout(() => setIsCapturing(false), 150);
   }, [webcamRef, capturedImages.length, realtimeWarning]);
 
   const handleFinish = () => {
@@ -141,6 +156,12 @@ export default function WebcamCapture({ onCaptureComplete, onCancel }) {
               </div>
            </div>
         </div>
+
+        {cameraError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
+            <p className="text-white/60 text-sm">Camera unavailable</p>
+          </div>
+        )}
       </div>
 
       {/* Actions */}
@@ -163,11 +184,21 @@ export default function WebcamCapture({ onCaptureComplete, onCancel }) {
         <div className="flex gap-3">
           <Button variant="ghost" onClick={onCancel} disabled={isCapturing}>Cancel</Button>
           {capturedImages.length < TARGET_SAMPLES ? (
-             <Button variant="primary" icon={Camera} onClick={capture} disabled={cameraError || realtimeWarning}>
+             <Button
+               variant="primary"
+               icon={Camera}
+               onClick={capture}
+               disabled={cameraError || !!realtimeWarning || isCapturing}
+             >
                Capture Sample
              </Button>
           ) : (
-             <Button variant="success" className="bg-emerald-600 text-white hover:bg-emerald-700" icon={CheckCircle2} onClick={handleFinish}>
+             <Button
+               variant="success"
+               className="bg-emerald-600 text-white hover:bg-emerald-700"
+               icon={CheckCircle2}
+               onClick={handleFinish}
+             >
                Sync & Enroll
              </Button>
           )}

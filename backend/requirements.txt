@@ -23,6 +23,7 @@ alembic>=1.13.1
 # --- Authentication (JWT + Password Hashing) ---
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+bcrypt==4.2.1  # passlib is incompatible with bcrypt 5.x
 python-multipart>=0.0.6
 
 # --- Face Recognition Model ---
@@ -36,6 +37,12 @@ openpyxl>=3.1.2
 
 # --- Email (password reset, alerts) ---
 fastapi-mail>=1.4.1
+
+# --- Security & rate limiting ---
+slowapi>=0.1.9
+
+# --- System monitoring ---
+psutil>=5.9.0
 
 # --- Utilities ---
 python-dotenv>=1.0.0

@@ -18,26 +18,17 @@ export default function ProfilePage() {
 
   const fetchProfile = async () => {
     try {
-      // Assuming a GET /auth/me endpoint exists based on the plan
       const response = await api.get('/auth/me');
       setUser(response.data);
       setFormData({
         name: response.data.name || '',
         bio: response.data.bio || '',
       });
+      // Keep sidebar user info in sync
+      localStorage.setItem('smart_attendance_user', JSON.stringify(response.data));
     } catch (error) {
       console.error(error);
-      // Fallback to local storage if API is not ready
-      const localUser = JSON.parse(localStorage.getItem('smart_attendance_user'));
-      if (localUser) {
-        setUser(localUser);
-        setFormData({
-          name: localUser.name || '',
-          bio: localUser.bio || '',
-        });
-      } else {
-        toast.error('Failed to load profile');
-      }
+      toast.error('Failed to load profile');
     } finally {
       setIsFetching(false);
     }
@@ -51,16 +42,10 @@ export default function ProfilePage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await api.put('/auth/me', formData);
+      const { data } = await api.put('/auth/me', formData);
+      setUser(data);
+      localStorage.setItem('smart_attendance_user', JSON.stringify(data));
       toast.success('Profile updated successfully');
-      
-      // Update local storage
-      if (user) {
-        localStorage.setItem('smart_attendance_user', JSON.stringify({
-          ...user,
-          ...formData
-        }));
-      }
     } catch (error) {
       console.error(error);
       toast.error('Failed to update profile');

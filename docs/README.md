@@ -1,32 +1,22 @@
-Documentation
-=============
+# Documentation
 
-This directory will contain documentation and design artifacts for the smart attendance system.
+Design artifacts and project planning for the Smart Attendance System.
 
-Suggested contents:
+## Available Documents
 
-- `project_overview.md` – High-level project summary and goals
-- `system_architecture.md` – Overall architecture and component interactions
-- `requirements_specification.md` – Functional and non-functional requirements
-- `api_design.md` – API endpoints and contracts (aligned with backend envelope and versioning rules)
-- `ml_design.md` – CNN architectures, training strategy, and evaluation
-- `ui_ux_design.md` – Wireframes and user flows, including Glassmorphism design notes
-- `deployment_guide.md` – Environment setup and deployment instructions
-- `testing_strategy.md` – Testing approach across frontend, backend, and ML
+| File | Description |
+|------|-------------|
+| [`requirements_specification.md`](requirements_specification.md) | 55 user stories across 9 modules with implementation status |
+| [`development_todo.md`](development_todo.md) | Phased development roadmap and task checklist |
+| [`project_audit_report.md`](project_audit_report.md) | Module-by-module audit of current vs planned state |
+| [`api_design.md`](api_design.md) | Implemented backend endpoints and endpoints still to build |
+| [`apm_implementation_plan.md`](apm_implementation_plan.md) | Attendance Processing Module architecture and plan |
 
-Documentation
-=============
+## Planned (not yet written)
 
-This directory will contain documentation and design artifacts for the smart attendance system.
-
-Suggested files:
-
-- `project_overview.md` – High-level project summary and goals
-- `system_architecture.md` – Overall architecture and component interactions
-- `requirements_specification.md` – Functional and non-functional requirements
-- `api_design.md` – API endpoints, payloads, and contracts
-- `ml_design.md` – CNN architectures, training strategy, and evaluation
+- `project_overview.md` – High-level project summary
+- `system_architecture.md` – Component interaction diagrams
+- `ml_design.md` – CNN architectures, training, and evaluation
 - `ui_ux_design.md` – Wireframes and user flows
-- `deployment_guide.md` – Environment setup and deployment instructions
+- `deployment_guide.md` – Environment setup and deployment
 - `testing_strategy.md` – Testing approach across frontend, backend, and ML
-
