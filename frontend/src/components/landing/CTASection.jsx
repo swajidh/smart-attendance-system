@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 
 export default function CTASection() {
@@ -16,10 +17,13 @@ export default function CTASection() {
           Stop counting manually. Start measuring engagement automatically. Deploy the smartest attendance architecture available.
         </p>
 
-        <button className="h-16 px-10 rounded-full bg-foreground text-background font-bold text-lg hover:bg-foreground/90 hover:scale-105 transition-all flex items-center justify-center gap-3 mx-auto shadow-2xl shadow-primary/20">
+        <Link
+          to="/login"
+          className="h-16 px-10 rounded-full bg-foreground text-background font-bold text-lg hover:bg-foreground/90 hover:scale-105 transition-all flex items-center justify-center gap-3 mx-auto shadow-2xl shadow-primary/20"
+        >
           Request Demo
           <ArrowRight className="h-5 w-5" />
-        </button>
+        </Link>
       </div>
     </section>
   );

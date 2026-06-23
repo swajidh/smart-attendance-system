@@ -85,10 +85,15 @@ async def system_health(db: AsyncSession = Depends(get_db_session)):
         ml_status["head_pose"] = "not_loaded"
 
     try:
-        from ml.face_encoder import FaceEncoder
-        ml_status["face_encoder"] = "ready"
-    except Exception:
+        from ml.face_encoder import ENCODER_READY, EMBEDDING_DIM
+        if ENCODER_READY:
+            ml_status["face_encoder"] = "ready"
+            ml_status["face_encoder_dim"] = EMBEDDING_DIM
+        else:
+            ml_status["face_encoder"] = "not_loaded"
+    except Exception as exc:
         ml_status["face_encoder"] = "not_loaded"
+        ml_status["face_encoder_error"] = str(exc)
 
     health["ml"] = ml_status
 

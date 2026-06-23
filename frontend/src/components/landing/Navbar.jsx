@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -47,12 +48,15 @@ export default function Navbar() {
           <a href="#system" className={linkClass('system')}>System</a>
         </nav>
         <div className="flex items-center gap-4">
-          <a href="#demo" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block">
+          <a href="#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block">
             View Demo
           </a>
-          <a href="#explore" className="bg-surface border border-border hover:border-foreground/40 text-foreground px-4 py-2 rounded-full text-sm font-semibold transition-all">
+          <Link
+            to="/login"
+            className="bg-surface border border-border hover:border-foreground/40 text-foreground px-4 py-2 rounded-full text-sm font-semibold transition-all"
+          >
             Explore
-          </a>
+          </Link>
         </div>
       </div>
     </header>

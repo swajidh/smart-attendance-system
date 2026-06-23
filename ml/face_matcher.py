@@ -11,7 +11,8 @@ from __future__ import annotations
 import numpy as np
 from typing import Optional
 
-DEFAULT_THRESHOLD = 0.55  # cosine similarity cutoff (0–1); higher = stricter
+DEFAULT_THRESHOLD = 0.45  # cosine similarity cutoff (0–1); higher = stricter
+SINGLE_GALLERY_THRESHOLD = 0.30  # relaxed when only one enrolled profile
 
 
 class FaceMatcher:
@@ -52,7 +53,11 @@ class FaceMatcher:
                 best_sim = sim
                 best_id = student_id
 
-        if best_sim >= self.threshold:
+        effective_threshold = self.threshold
+        if len(gallery) == 1:
+            effective_threshold = min(self.threshold, SINGLE_GALLERY_THRESHOLD)
+
+        if best_sim >= effective_threshold:
             return best_id, round(best_sim, 4)
         return None, round(best_sim, 4)
 

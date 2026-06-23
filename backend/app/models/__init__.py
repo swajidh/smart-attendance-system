@@ -24,6 +24,18 @@ class Base(DeclarativeBase):
     pass
 
 
+# Import all models so SQLAlchemy relationship strings resolve at mapper configure time.
+from app.models.user import User  # noqa: E402, F401
+from app.models.student import Student  # noqa: E402, F401
+from app.models.course import Course  # noqa: E402, F401
+from app.models.course_student import CourseStudent  # noqa: E402, F401
+from app.models.session import Session  # noqa: E402, F401
+from app.models.attendance import Attendance  # noqa: E402, F401
+from app.models.attention_log import AttentionLog  # noqa: E402, F401
+from app.models.alert import Alert  # noqa: E402, F401
+from app.models.audit_log import AuditLog  # noqa: E402, F401
+
+
 async def get_db():
     async with AsyncSessionLocal() as session:
         try:

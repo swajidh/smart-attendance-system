@@ -10,7 +10,8 @@ import {
   BarChart2, 
   Settings, 
   LogOut,
-  User
+  User,
+  ScanFace
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import api from '../../services/api';
@@ -58,6 +59,7 @@ export default function Sidebar({ isCollapsed }) {
       roles: ['admin', 'teacher'],
       items: [
         { name: "Students", path: "/dashboard/students", icon: Users },
+        { name: "Face Enrollment", path: "/dashboard/enrollment", icon: ScanFace },
         { name: "Courses", path: "/dashboard/courses", icon: BookOpen },
         { name: "Attendance", path: "/dashboard/reports", icon: ClipboardList }
       ]

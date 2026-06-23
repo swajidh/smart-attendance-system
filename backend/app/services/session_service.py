@@ -172,15 +172,63 @@ async def mark_present(
     if record is None:
         return False
     if record.status == AttendanceStatus.present:
-        return False  # already marked
+        return False
 
+    now = datetime.now(timezone.utc)
     record.status = AttendanceStatus.present
     record.confidence = confidence
-    record.first_seen = datetime.now(timezone.utc)
+    record.first_seen = now
+    record.modified_at = now
     record.marked_by = MarkedBy.auto
     db.add(record)
     await db.commit()
     return True
+
+
+async def record_recognition(
+    db: AsyncSession,
+    session_id: UUID,
+    student_id: UUID,
+    confidence: float,
+) -> Optional[Attendance]:
+    """
+    Mark or refresh a student on every successful match — keeps monitoring
+    active for the full session (updates confidence / last_seen each frame).
+    """
+    result = await db.execute(
+        select(Attendance).where(
+            Attendance.session_id == session_id,
+            Attendance.student_id == student_id,
+        )
+    )
+    record = result.scalar_one_or_none()
+    if record is None:
+        return None
+
+    now = datetime.now(timezone.utc)
+    if record.status != AttendanceStatus.present:
+        record.status = AttendanceStatus.present
+        record.first_seen = now
+
+    record.confidence = confidence
+    record.modified_at = now
+    record.marked_by = MarkedBy.auto
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    return record
+
+
+async def count_present(db: AsyncSession, session_id: UUID) -> int:
+    result = await db.execute(
+        select(func.count())
+        .select_from(Attendance)
+        .where(
+            Attendance.session_id == session_id,
+            Attendance.status == AttendanceStatus.present,
+        )
+    )
+    return result.scalar() or 0
 
 
 async def manual_override(
@@ -242,6 +290,15 @@ async def load_roster_cache(db: AsyncSession, session: Session) -> dict[str, lis
     sid = str(session.id)
     if sid in _roster_cache:
         return _roster_cache[sid]
+
+    return await reload_roster_cache(db, session)
+
+
+async def reload_roster_cache(db: AsyncSession, session: Session) -> dict[str, list[float]]:
+    """Force-reload embeddings from DB (picks up newly enrolled faces mid-session)."""
+    sid = str(session.id)
+    _roster_cache.pop(sid, None)
+    _roster_meta.pop(sid, None)
 
     q = (
         select(Student)

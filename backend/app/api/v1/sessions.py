@@ -16,10 +16,9 @@ WebSocket:
 """
 
 from __future__ import annotations
+import asyncio
 import json
 import logging
-import sys
-import os
 from typing import Optional
 from uuid import UUID
 
@@ -47,19 +46,12 @@ router = APIRouter()
 
 _require_teacher_or_admin = require_role(UserRole.teacher, UserRole.admin)
 
-# Ensure ml/ is importable
-_project_root = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")
-)
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
-
 try:
-    from ml.face_encoder import get_embedding_from_base64
+    from ml.face_encoder import get_embedding_from_base64, compute_live_probe_embedding
     from ml.face_matcher import FaceMatcher
     from ml.quality_validator import validate_base64
 
-    _matcher = FaceMatcher(threshold=0.55)
+    _matcher = FaceMatcher(threshold=0.45)
     _ml_ready = True
     logger.info("Session WS: ML pipeline loaded OK")
 except Exception as exc:
@@ -344,7 +336,44 @@ async def detect_websocket(
         user.email,
     )
 
+    await websocket.send_text(json.dumps({
+        "type": "connected",
+        "roster_size": session.total_enrolled,
+        "recognition_profiles": len(embeddings),
+    }))
+
     unknown_batch_counter = 0  # debounce DB writes for unknowns
+    frame_counter = 0
+    ROSTER_REFRESH_EVERY = 60  # reload embeddings ~every 30s at 2 FPS
+
+    async def _refresh_embeddings_if_due() -> None:
+        nonlocal embeddings, meta
+        if frame_counter <= 0 or frame_counter % ROSTER_REFRESH_EVERY != 0:
+            return
+        async with AsyncSessionLocal() as db_refresh:
+            fresh_session = await session_service.get_session(db_refresh, session_id)
+            if fresh_session:
+                await session_service.reload_roster_cache(db_refresh, fresh_session)
+                embeddings, meta = session_service.get_cached_roster(session_id)
+                logger.info(
+                    "Session %s: refreshed embedding cache (%d profiles)",
+                    session_id,
+                    len(embeddings),
+                )
+
+    async def _session_stats(present_in_frame: int, unknown_in_frame: int, class_attention: float) -> dict:
+        async with AsyncSessionLocal() as db_stats:
+            roster_present = await session_service.count_present(db_stats, session_id)
+        return {
+            "present": roster_present,
+            "present_in_frame": present_in_frame,
+            "roster_present": roster_present,
+            "unknown": unknown_in_frame,
+            "class_attention": class_attention,
+            "frame": frame_counter,
+            "profiles_loaded": len(embeddings),
+            "monitoring": True,
+        }
 
     try:
         while True:
@@ -354,25 +383,72 @@ async def detect_websocket(
             except json.JSONDecodeError:
                 continue
 
-            if msg.get("type") != "frame":
+            msg_type = msg.get("type")
+
+            if msg_type == "ping":
+                await websocket.send_text(json.dumps({"type": "pong", "monitoring": True}))
+                continue
+
+            if msg_type == "refresh_roster":
+                await _refresh_embeddings_if_due()
+                await websocket.send_text(json.dumps({
+                    "type": "roster_refreshed",
+                    "recognition_profiles": len(embeddings),
+                }))
+                continue
+
+            if msg_type != "frame":
                 continue
 
             b64_image = msg.get("image", "")
             if not b64_image:
                 continue
 
+            frame_counter += 1
+            await _refresh_embeddings_if_due()
+            single_face = False
+
             # ── Face detection (MediaPipe, fast) ──────────────────────────
             from app.services.ml_service import ml_service as _ml_svc
             raw_faces = _ml_svc.process_frame(b64_image)
 
             if not raw_faces:
-                await websocket.send_text(json.dumps({"faces": [], "stats": {"present": 0, "unknown": 0}}))
+                if frame_counter == 1 or frame_counter % 25 == 0:
+                    import cv2
+                    import numpy as np
+                    try:
+                        raw = b64_image.split(",", 1)[1] if "," in b64_image else b64_image
+                        img_bytes = __import__("base64").b64decode(raw)
+                        nparr = np.frombuffer(img_bytes, np.uint8)
+                        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        if img is not None:
+                            logger.info(
+                                "Session %s frame %d: no face detected (img %dx%d brightness=%.1f)",
+                                session_id, frame_counter, img.shape[1], img.shape[0], float(img.mean()),
+                            )
+                        else:
+                            logger.info("Session %s frame %d: no face detected (decode failed)", session_id, frame_counter)
+                    except Exception:
+                        logger.info("Session %s frame %d: no face detected", session_id, frame_counter)
+                class_attention = 0.0
+                if _attention_ready and _attention_scorer:
+                    class_attention = _attention_scorer.get_class_average(str(session_id))
+                stats_payload = await _session_stats(0, 0, class_attention)
+                await websocket.send_text(json.dumps({
+                    "faces": [],
+                    "stats": stats_payload,
+                    "monitoring": True,
+                }))
                 continue
+
+            single_face = len(raw_faces) == 1
 
             # ── Face recognition (FaceEncoder + FaceMatcher) ──────────────
             response_faces = []
             unknown_count = 0
             frame_alerts = []
+            best_log_conf = -1.0
+            embed_ok = False
 
             for face in raw_faces:
                 face_result = {
@@ -388,65 +464,76 @@ async def detect_websocket(
                 }
 
                 if _ml_ready and embeddings:
-                    embedding = get_embedding_from_base64(b64_image)
+                    face_box = (
+                        face["x"],
+                        face["y"],
+                        face["width"],
+                        face["height"],
+                    )
+                    embedding = await asyncio.to_thread(
+                        compute_live_probe_embedding,
+                        b64_image,
+                        *face_box,
+                        single_face_in_frame=single_face,
+                    )
                     if embedding is not None:
+                        embed_ok = True
                         matched_id, match_conf = _matcher.match(embedding, embeddings)
+                        best_log_conf = max(best_log_conf, match_conf)
+                        face_result["recognitionConfidence"] = match_conf
                         if matched_id:
                             info = meta.get(matched_id, {})
                             face_result["status"] = "Present"
                             face_result["studentId"] = info.get("student_code")
                             face_result["studentName"] = info.get("name")
-                            face_result["recognitionConfidence"] = match_conf
 
-                            # ── Attention scoring ──────────────────────────
-                            attn_score = None
-                            pose_result = None
-                            posture_result = None
-                            if _attention_ready and _head_pose_mod and _attention_scorer and _posture_detector:
-                                pose_result = _head_pose_mod.estimate_from_base64(b64_image)
-                                sid_str = str(session_id)
-                                mid_str = matched_id
-                                attn_score = _attention_scorer.update(sid_str, mid_str, pose_result)
-                                posture_result = _posture_detector.detect(sid_str, mid_str, pose_result)
-
-                                face_result["attentionScore"] = attn_score
-                                face_result["headPose"] = pose_result
-                                face_result["posture"] = posture_result.get("posture") if posture_result else None
-                                face_result["postureFlagged"] = posture_result.get("flagged", False) if posture_result else False
-
-                                # Throttled DB persist (every 30 recognised frames per student)
-                                if _attention_scorer.should_persist(sid_str, mid_str):
-                                    async with AsyncSessionLocal() as db_att:
-                                        from app.services.attention_service import store_attention_log
-                                        await store_attention_log(
-                                            db_att,
-                                            session_id,
-                                            UUID(matched_id),
-                                            attn_score,
-                                            pose_result,
-                                            posture_result.get("posture") if posture_result else None,
-                                        )
-
-                            # Idempotent mark present
+                            # Refresh attendance on every match (continuous monitoring)
                             async with AsyncSessionLocal() as db2:
-                                await session_service.mark_present(
+                                att = await session_service.record_recognition(
                                     db2,
                                     session_id,
                                     UUID(matched_id),
                                     match_conf,
                                 )
-                                # Get attendance record ID for manual override
-                                from sqlalchemy import select
-                                from app.models.attendance import Attendance
-                                rec = await db2.execute(
-                                    select(Attendance).where(
-                                        Attendance.session_id == session_id,
-                                        Attendance.student_id == UUID(matched_id),
-                                    )
-                                )
-                                att = rec.scalar_one_or_none()
                                 if att:
                                     face_result["attendanceRecordId"] = str(att.id)
+
+                            if frame_counter == 1 or frame_counter % 25 == 0:
+                                logger.info(
+                                    "Session %s frame %d: MATCH %s (conf=%.3f)",
+                                    session_id,
+                                    frame_counter,
+                                    info.get("name"),
+                                    match_conf,
+                                )
+
+                            # ── Attention scoring (optional — never blocks attendance) ──
+                            try:
+                                if _attention_ready and _head_pose_mod and _attention_scorer and _posture_detector:
+                                    pose_result = _head_pose_mod.estimate_from_base64(b64_image)
+                                    sid_str = str(session_id)
+                                    mid_str = matched_id
+                                    attn_score = _attention_scorer.update(sid_str, mid_str, pose_result)
+                                    posture_result = _posture_detector.detect(sid_str, mid_str, pose_result)
+
+                                    face_result["attentionScore"] = attn_score
+                                    face_result["headPose"] = pose_result
+                                    face_result["posture"] = posture_result.get("posture") if posture_result else None
+                                    face_result["postureFlagged"] = posture_result.get("flagged", False) if posture_result else False
+
+                                    if _attention_scorer.should_persist(sid_str, mid_str):
+                                        async with AsyncSessionLocal() as db_att:
+                                            from app.services.attention_service import store_attention_log
+                                            await store_attention_log(
+                                                db_att,
+                                                session_id,
+                                                UUID(matched_id),
+                                                attn_score,
+                                                pose_result,
+                                                posture_result.get("posture") if posture_result else None,
+                                            )
+                            except Exception as att_exc:
+                                logger.debug("Attention scoring skipped: %s", att_exc)
                         else:
                             unknown_count += 1
                     else:
@@ -455,6 +542,17 @@ async def detect_websocket(
                     unknown_count += 1
 
                 response_faces.append(face_result)
+
+            if frame_counter == 1 or frame_counter % 25 == 0:
+                logger.info(
+                    "Session %s frame %d: faces=%d embed=%s best_conf=%.3f present=%d",
+                    session_id,
+                    frame_counter,
+                    len(raw_faces),
+                    embed_ok,
+                    best_log_conf,
+                    sum(1 for f in response_faces if f["status"] == "Present"),
+                )
 
             # Debounce unknown DB writes (every 10 unknowns)
             if unknown_count > 0:
@@ -465,7 +563,7 @@ async def detect_websocket(
                             await session_service.increment_unknown(db3, session_id)
                     unknown_batch_counter = 0
 
-            present_count = sum(1 for f in response_faces if f["status"] == "Present")
+            present_in_frame = sum(1 for f in response_faces if f["status"] == "Present")
 
             # Class-level attention stats
             class_attention = 0.0
@@ -515,13 +613,12 @@ async def detect_websocket(
                             except Exception as _ae:
                                 logger.warning("Alert log failed: %s", _ae)
 
+            stats_payload = await _session_stats(present_in_frame, unknown_count, class_attention)
+
             payload: dict = {
                 "faces": response_faces,
-                "stats": {
-                    "present": present_count,
-                    "unknown": unknown_count,
-                    "class_attention": class_attention,
-                },
+                "stats": stats_payload,
+                "monitoring": True,
             }
             if frame_alerts:
                 payload["alerts"] = frame_alerts

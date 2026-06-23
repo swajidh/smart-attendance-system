@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, UploadCloud, Users, CheckCircle2, FileArchive, Loader2, AlertCircle, FileText } from 'lucide-react';
+import { Camera, UploadCloud, Users, CheckCircle2, FileArchive, Loader2, AlertCircle, FileText, Search, UserPlus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
@@ -15,6 +15,8 @@ export default function FaceEnrollment() {
   const [activeTab, setActiveTab] = useState('webcam');
   // Capture Flow State: 'form' -> 'active_camera'
   const [captureStep, setCaptureStep] = useState('form');
+  const [webcamMode, setWebcamMode] = useState('existing'); // 'existing' | 'new'
+  const [pickerQuery, setPickerQuery] = useState('');
   const [currentStudent, setCurrentStudent] = useState(null);
 
   // Bulk Upload Flow State: 'idle' -> 'uploading'
@@ -22,6 +24,7 @@ export default function FaceEnrollment() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [bulkResult, setBulkResult] = useState(null);
   const fileInputRef = useRef(null);
+  const capturePanelRef = useRef(null);
 
   const [searchParams] = useSearchParams();
   const reEnrollId = searchParams.get('student');
@@ -38,6 +41,12 @@ export default function FaceEnrollment() {
   useEffect(() => {
     fetchStudents();
   }, []);
+
+  useEffect(() => {
+    if (!isLoading && studentsList.length === 0) {
+      setWebcamMode('new');
+    }
+  }, [isLoading, studentsList.length]);
 
   useEffect(() => {
     // If a specific student ID is passed to re-enroll and students list is loaded
@@ -75,6 +84,26 @@ export default function FaceEnrollment() {
       student.department?.toLowerCase().includes(q)
     );
   });
+
+  const pickerStudents = studentsList.filter(student => {
+    const q = pickerQuery.toLowerCase();
+    if (!q) return true;
+    return (
+      student.name?.toLowerCase().includes(q) ||
+      student.student_id?.toLowerCase().includes(q) ||
+      student.roll_no?.toLowerCase().includes(q) ||
+      student.department?.toLowerCase().includes(q)
+    );
+  });
+
+  const startCaptureForStudent = (student) => {
+    setCurrentStudent(student);
+    setCaptureStep('active_camera');
+    setActiveTab('webcam');
+    requestAnimationFrame(() => {
+      capturePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
 
   const handleRegistrationSubmit = (createdStudent) => {
     // createdStudent is the DB response from POST /students (has real UUID id)
@@ -114,11 +143,13 @@ export default function FaceEnrollment() {
 
   const completeEnrollment = async (images) => {
     const loadingToast = toast.loading(`Enrolling ${currentStudent?.name}...`);
+    const isReEnroll = currentStudent?.embedding_status === 'enrolled';
+    const endpoint = isReEnroll
+      ? `/students/${currentStudent.id}/re-enroll`
+      : `/students/${currentStudent.id}/enroll-face`;
+
     try {
-      const res = await api.post(
-        `/students/${currentStudent.id}/enroll-face`,
-        { images }
-      );
+      const res = await api.post(endpoint, { images });
       const data = res.data;
       if (data.status === 'error') {
         toast.error(data.message, { id: loadingToast });
@@ -190,7 +221,7 @@ export default function FaceEnrollment() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left Side: Capture/Upload Interface */}
-        <div className="lg:col-span-2 space-y-6">
+        <div ref={capturePanelRef} className="lg:col-span-2 space-y-6">
           <Card noPadding className="rounded-[32px] overflow-hidden border-slate-100/60">
             <div className="px-6 pt-5 border-b border-slate-100 bg-white">
               <Tabs tabs={tabs} activeTab={activeTab} onTabChange={(tab) => {
@@ -202,11 +233,100 @@ export default function FaceEnrollment() {
             
             <CardContent className="min-h-[500px] flex items-center justify-center bg-slate-50/50">
               {activeTab === 'webcam' && captureStep === 'form' && (
-                <div className="w-full flex justify-center py-6">
-                   <StudentRegistrationForm 
-                     onSubmit={handleRegistrationSubmit} 
-                     existingIds={studentsList.map(s => s.student_id)}
-                   />
+                <div className="w-full max-w-2xl mx-auto py-6 px-6">
+                  <div className="flex rounded-xl border border-slate-200 bg-white p-1 mb-6">
+                    <button
+                      type="button"
+                      onClick={() => setWebcamMode('existing')}
+                      disabled={studentsList.length === 0}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                        webcamMode === 'existing'
+                          ? 'bg-[#EBF3FF] text-[#1E5BF0]'
+                          : 'text-slate-500 hover:text-slate-700 disabled:opacity-40'
+                      }`}
+                    >
+                      <Users className="w-4 h-4" />
+                      Existing Student
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWebcamMode('new')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                        webcamMode === 'new'
+                          ? 'bg-[#EBF3FF] text-[#1E5BF0]'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Register New
+                    </button>
+                  </div>
+
+                  {webcamMode === 'existing' ? (
+                    <div className="text-left space-y-4">
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-lg">Select a student</h3>
+                        <p className="text-slate-500 text-sm mt-1">
+                          Choose someone already in the roster to capture or update their face data.
+                        </p>
+                      </div>
+
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                        <input
+                          type="text"
+                          placeholder="Search by name, ID, or roll number..."
+                          value={pickerQuery}
+                          onChange={(e) => setPickerQuery(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+
+                      <div className="max-h-[320px] overflow-y-auto space-y-2 rounded-xl border border-slate-100 bg-white p-2">
+                        {isLoading ? (
+                          <p className="text-center text-slate-500 py-8 text-sm">Loading students...</p>
+                        ) : pickerStudents.length === 0 ? (
+                          <p className="text-center text-slate-500 py-8 text-sm">
+                            {studentsList.length === 0
+                              ? 'No students yet. Switch to Register New to add one.'
+                              : 'No students matched your search.'}
+                          </p>
+                        ) : (
+                          pickerStudents.map((student) => (
+                            <div
+                              key={student.id}
+                              className="flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-800 truncate">{student.name}</p>
+                                <p className="text-xs text-slate-500 truncate">
+                                  {student.student_id} • {student.roll_no}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge variant={student.embedding_status === 'enrolled' ? 'success' : 'warning'}>
+                                  {student.embedding_status === 'enrolled' ? 'Enrolled' : 'Pending'}
+                                </Badge>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  icon={Camera}
+                                  onClick={() => startCaptureForStudent(student)}
+                                >
+                                  {student.embedding_status === 'enrolled' ? 'Re-capture' : 'Capture'}
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <StudentRegistrationForm
+                      onSubmit={handleRegistrationSubmit}
+                      existingIds={studentsList.map(s => s.student_id)}
+                    />
+                  )}
                 </div>
               )}
 
@@ -215,9 +335,13 @@ export default function FaceEnrollment() {
                   <div className="flex items-center justify-between mb-8 max-w-2xl mx-auto w-full px-6">
                      <div className="text-left">
                        <h3 className="font-bold text-slate-800 text-lg">{currentStudent?.name}</h3>
-                       <p className="text-slate-500 text-sm">{currentStudent?.studentId} • {currentStudent?.rollNo}</p>
+                       <p className="text-slate-500 text-sm">
+                         {currentStudent?.student_id} • {currentStudent?.roll_no}
+                       </p>
                      </div>
-                     <Badge variant="primary">Step 2: Capture</Badge>
+                     <Badge variant="primary">
+                       {currentStudent?.embedding_status === 'enrolled' ? 'Re-capture' : 'Step 2: Capture'}
+                     </Badge>
                   </div>
                   
                   <WebcamCapture 
@@ -227,12 +351,6 @@ export default function FaceEnrollment() {
                      }}
                      onCaptureComplete={completeEnrollment}
                   />
-                  <div className="max-w-2xl mx-auto w-full px-6 mt-4 opacity-50 hover:opacity-100 transition-opacity flex justify-center">
-                    <Button variant="ghost" size="sm" onClick={() => {
-                        toast.error(`Registration failed for ${currentStudent?.name}. Face not detected clearly.`);
-                        setCaptureStep('form');
-                    }}>Simulate Flow Failure</Button>
-                  </div>
                 </div>
               )}
 
@@ -388,7 +506,7 @@ export default function FaceEnrollment() {
                 <th className="px-6 py-4 font-semibold">Department</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 font-semibold">Embeddings</th>
-                <th className="px-6 py-4 font-semibold">Attendance</th>
+                <th className="px-6 py-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
@@ -426,6 +544,16 @@ export default function FaceEnrollment() {
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
                      {student.enrollment_samples > 0 ? `${student.enrollment_samples} samples` : '—'}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={Camera}
+                      onClick={() => startCaptureForStudent(student)}
+                    >
+                      {student.embedding_status === 'enrolled' ? 'Re-capture' : 'Capture'}
+                    </Button>
                   </td>
                 </tr>
               ))}

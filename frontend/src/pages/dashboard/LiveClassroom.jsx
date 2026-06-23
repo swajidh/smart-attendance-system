@@ -19,6 +19,8 @@ const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1')
 export default function LiveClassroom() {
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
+  const wsRef = useRef(null);
+  const frameCountRef = useRef(0);
 
   // ── state ──────────────────────────────────────────────────────────────────
   const [courses, setCourses] = useState([]);
@@ -29,7 +31,14 @@ export default function LiveClassroom() {
   const [sessionData, setSessionData] = useState(null);   // full session response
   const [roster, setRoster] = useState([]);               // AttendanceRecordResponse[]
   const [faces, setFaces] = useState([]);
-  const [stats, setStats] = useState({ present: 0, unknown: 0, class_attention: null });
+  const [stats, setStats] = useState({
+    present: 0,
+    presentInFrame: 0,
+    unknown: 0,
+    class_attention: null,
+    frame: 0,
+    profilesLoaded: 0,
+  });
   const [attentionScores, setAttentionScores] = useState({}); // { studentId: score }
   const [isConnected, setIsConnected] = useState(false);
   const [isIdle, setIsIdle] = useState(true);
@@ -37,6 +46,8 @@ export default function LiveClassroom() {
   const [isStarting, setIsStarting] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
   const [postClassSummary, setPostClassSummary] = useState(null); // set after session close
+  const [recognitionProfiles, setRecognitionProfiles] = useState(null);
+  const [cameraReady, setCameraReady] = useState(false);
   const alertedStudents = useRef(new Set()); // debounce — prevent repeated toasts per session
 
   // ── load courses ───────────────────────────────────────────────────────────
@@ -63,6 +74,7 @@ export default function LiveClassroom() {
       return;
     }
     setIsStarting(true);
+    setCameraReady(false);
     try {
       const res = await api.post('/sessions', { course_id: selectedCourseId });
       const session = res.data;
@@ -86,9 +98,9 @@ export default function LiveClassroom() {
     );
 
     socket.onopen = () => {
+      wsRef.current = socket;
       setIsConnected(true);
       setSessionActive(true);
-      toast.success('ML Engine connected — recognition active');
     };
 
     socket.onmessage = (event) => {
@@ -99,37 +111,97 @@ export default function LiveClassroom() {
         return;
       }
 
-      if (data.faces) {
-        setFaces(data.faces);
-        setIsIdle(data.faces.length === 0);
+      if (data.type === 'connected') {
+        setRecognitionProfiles(data.recognition_profiles ?? 0);
+        setStats(prev => ({
+          ...prev,
+          profilesLoaded: data.recognition_profiles ?? 0,
+        }));
+        if ((data.recognition_profiles ?? 0) === 0) {
+          toast.error(
+            'No face profiles for this course. Enroll faces under Face Enrollment, then add students to the course.',
+            { duration: 8000 }
+          );
+        } else {
+          toast.success(
+            `Continuous monitoring active — ${data.recognition_profiles} face profile(s) loaded`
+          );
+        }
+        return;
+      }
 
-        // Update roster status + attention scores for recognized students
+      if (data.type === 'roster_refreshed') {
+        setRecognitionProfiles(data.recognition_profiles ?? 0);
+        setStats(prev => ({
+          ...prev,
+          profilesLoaded: data.recognition_profiles ?? prev.profilesLoaded,
+        }));
+        return;
+      }
+
+      if (data.type === 'pong') {
+        return;
+      }
+
+      if (data.faces || data.stats) {
+        if (data.faces) {
+          setFaces(data.faces);
+          setIsIdle(data.faces.length === 0);
+        }
+
+        const rosterPresent = data.stats?.roster_present ?? data.stats?.present ?? 0;
+        const presentInFrame = data.stats?.present_in_frame
+          ?? (data.faces ? data.faces.filter(f => f.status === 'Present').length : 0);
+
+        // Update roster + attention for every recognized face in this frame
         const newScores = {};
-        setRoster(prev => {
-          const updated = [...prev];
-          data.faces.forEach(face => {
-            if (face.status === 'Present' && face.attendanceRecordId) {
-              const idx = updated.findIndex(r => String(r.id) === face.attendanceRecordId);
+        if (data.faces?.length) {
+          setRoster(prev => {
+            const updated = [...prev];
+            data.faces.forEach(face => {
+              if (face.status !== 'Present') return;
+
+              let idx = face.attendanceRecordId
+                ? updated.findIndex(r => String(r.id) === face.attendanceRecordId)
+                : -1;
+              if (idx < 0 && face.studentId) {
+                idx = updated.findIndex(r => r.student_code === face.studentId);
+              }
+
               if (idx >= 0) {
-                updated[idx] = { ...updated[idx], status: 'present' };
-                // Map by student_code / studentId so we can look up in render
+                updated[idx] = {
+                  ...updated[idx],
+                  status: 'present',
+                  confidence: face.recognitionConfidence ?? updated[idx].confidence,
+                };
                 if (face.studentId != null) {
                   newScores[face.studentId] = face.attentionScore ?? null;
                 }
               }
-            }
+            });
+            return updated;
           });
-          return updated;
-        });
+        }
         if (Object.keys(newScores).length > 0) {
           setAttentionScores(prev => ({ ...prev, ...newScores }));
         }
 
-        const unknownCount = data.faces.filter(f => f.status === 'Unknown').length;
+        const unknownCount = data.faces
+          ? data.faces.filter(f => f.status === 'Unknown').length
+          : (data.stats?.unknown ?? 0);
+
+        if (data.stats?.frame) {
+          frameCountRef.current = data.stats.frame;
+        }
+
         setStats(prev => ({
           ...prev,
+          present: rosterPresent,
+          presentInFrame,
           unknown: unknownCount,
           class_attention: data.stats?.class_attention ?? prev.class_attention,
+          frame: data.stats?.frame ?? prev.frame,
+          profilesLoaded: data.stats?.profiles_loaded ?? prev.profilesLoaded,
         }));
       }
 
@@ -157,24 +229,38 @@ export default function LiveClassroom() {
     };
 
     socket.onclose = () => {
+      wsRef.current = null;
       setIsConnected(false);
     };
 
+    wsRef.current = socket;
     setWs(socket);
   };
 
-  // ── frame sending loop ─────────────────────────────────────────────────────
+  // ── frame sending loop (runs for entire session) ───────────────────────────
   const sendFrame = useCallback(() => {
-    if (!ws || ws.readyState !== WebSocket.OPEN || !webcamRef.current) return;
+    const socket = wsRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !webcamRef.current || !cameraReady) return;
+    const video = webcamRef.current.video;
+    if (!video || video.readyState < 2 || video.videoWidth === 0) return;
     const img = webcamRef.current.getScreenshot();
-    if (img) ws.send(JSON.stringify({ type: 'frame', image: img }));
-  }, [ws]);
+    if (img) socket.send(JSON.stringify({ type: 'frame', image: img }));
+  }, [cameraReady]);
 
   useEffect(() => {
-    if (!isConnected) return;
-    const interval = setInterval(sendFrame, 200); // ~5 FPS
-    return () => clearInterval(interval);
-  }, [isConnected, sendFrame]);
+    if (!isConnected || !cameraReady) return;
+    const frameInterval = setInterval(sendFrame, 500);
+    const pingInterval = setInterval(() => {
+      const socket = wsRef.current;
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 25000);
+    return () => {
+      clearInterval(frameInterval);
+      clearInterval(pingInterval);
+    };
+  }, [isConnected, cameraReady, sendFrame]);
 
   // ── draw bounding boxes ────────────────────────────────────────────────────
   useEffect(() => {
@@ -204,7 +290,9 @@ export default function LiveClassroom() {
 
       const label = isPresent
         ? `✓ ${face.studentName || face.studentId || 'Recognized'}`
-        : '⚠ Unknown';
+        : face.recognitionConfidence != null
+          ? `? ${Math.round(face.recognitionConfidence * 100)}%`
+          : '⚠ Unknown';
       const labelW = ctx.measureText(label).width + 20;
       ctx.fillStyle = isPresent ? '#22c55e' : '#ef4444';
       ctx.fillRect(x, y - 28, labelW, 22);
@@ -237,7 +325,7 @@ export default function LiveClassroom() {
     if (!window.confirm('Finalize this session? Absent students will be recorded.')) return;
     setIsEnding(true);
     try {
-      if (ws) ws.close();
+      wsRef.current?.close();
       setIsConnected(false);
       setSessionActive(false);
       alertedStudents.current.clear();
@@ -288,13 +376,17 @@ export default function LiveClassroom() {
   };
 
   // ── computed stats ─────────────────────────────────────────────────────────
-  const presentCount = roster.filter(r => r.status === 'present').length;
+  const presentCount = Math.max(
+    roster.filter(r => String(r.status).toLowerCase() === 'present').length,
+    stats.present ?? 0,
+  );
+  const scanningActive = isConnected && cameraReady && sessionActive;
   const selectedCourse = courses.find(c => c.id === selectedCourseId);
 
   // ── cleanup ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    return () => { if (ws) ws.close(); };
-  }, [ws]);
+    return () => { wsRef.current?.close(); };
+  }, []);
 
   // ── UI ─────────────────────────────────────────────────────────────────────
   return (
@@ -305,24 +397,32 @@ export default function LiveClassroom() {
           <p className="text-sm text-slate-500 mt-1">Real-time attendance tracking via facial recognition</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col items-end gap-1">
           <div className={`px-4 py-2 rounded-full flex items-center gap-2.5 text-sm font-semibold shadow-sm ${
             !sessionActive ? 'bg-slate-100 text-slate-500 border border-slate-200' :
             !isConnected  ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+            !cameraReady  ? 'bg-amber-50 text-amber-600 border border-amber-100' :
             isIdle        ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' :
                             'bg-emerald-50 text-emerald-600 border border-emerald-100'
           }`}>
             <div className={`w-2.5 h-2.5 rounded-full ${
               !sessionActive ? 'bg-slate-400' :
               !isConnected  ? 'bg-rose-500' :
-              isIdle        ? 'bg-indigo-500' :
+              !cameraReady  ? 'bg-amber-500' :
+              isIdle        ? 'bg-indigo-500 animate-pulse' :
                               'bg-emerald-500 animate-pulse'
             }`} />
             {!sessionActive ? 'No Active Session' :
-             !isConnected   ? 'Connecting...' :
-             isIdle         ? 'ML Engine: Idle' :
-                              'ML Engine: Running'}
+             !isConnected ? 'Connecting...' :
+             !cameraReady ? 'Starting Camera...' :
+             isIdle ? 'Scanning — no face in frame' :
+             'Scanning — face detected'}
           </div>
+          {scanningActive && (
+            <p className="text-[11px] text-slate-500">
+              Frame {stats.frame || 0} · {stats.profilesLoaded || recognitionProfiles || 0} profile(s) · continuous monitoring
+            </p>
+          )}
         </div>
       </div>
 
@@ -394,11 +494,25 @@ export default function LiveClassroom() {
               </div>
 
               <CardContent className="p-0 relative bg-slate-950 aspect-video flex items-center justify-center overflow-hidden">
+                {!cameraReady && (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/90 text-white">
+                    <Loader2 className="w-8 h-8 animate-spin mb-3" />
+                    <p className="text-sm font-medium">Starting camera…</p>
+                    <p className="text-xs text-slate-400 mt-1">Allow webcam access if prompted</p>
+                  </div>
+                )}
                 <Webcam
                   ref={webcamRef}
                   audio={false}
+                  mirrored
                   screenshotFormat="image/jpeg"
-                  videoConstraints={{ width: 1280, height: 720, facingMode: 'user' }}
+                  screenshotQuality={0.92}
+                  onUserMedia={() => setCameraReady(true)}
+                  onUserMediaError={() => {
+                    setCameraReady(false);
+                    toast.error('Camera access failed. Allow webcam permission and retry.');
+                  }}
+                  videoConstraints={{ facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }}
                   className="w-full h-full object-cover"
                 />
                 <canvas
@@ -487,6 +601,11 @@ export default function LiveClassroom() {
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500">Live attendance — toggle to override</p>
+                {recognitionProfiles != null && recognitionProfiles === 0 && (
+                  <p className="text-xs text-amber-600 mt-1 font-medium">
+                    No face profiles loaded for this course.
+                  </p>
+                )}
               </div>
               <div className="max-h-[320px] overflow-y-auto p-2">
                 {roster.length === 0 ? (
@@ -515,21 +634,21 @@ export default function LiveClassroom() {
                         );
                       })()}
                       <span className={`text-xs font-semibold px-2 py-1 rounded-md ${
-                        record.status === 'present'
+                        String(record.status).toLowerCase() === 'present'
                           ? 'bg-emerald-100 text-emerald-700'
                           : 'bg-slate-100 text-slate-500'
                       }`}>
-                        {record.status === 'present' ? 'Present' : 'Absent'}
+                        {String(record.status).toLowerCase() === 'present' ? 'Present' : 'Absent'}
                       </span>
                       <button
                         onClick={() => toggleAttendance(record)}
                         className={`w-10 h-6 rounded-full relative transition-colors ${
-                          record.status === 'present' ? 'bg-emerald-500' : 'bg-slate-300'
+                          String(record.status).toLowerCase() === 'present' ? 'bg-emerald-500' : 'bg-slate-300'
                         }`}
                         title="Toggle attendance (manual override)"
                       >
                         <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
-                          record.status === 'present' ? 'translate-x-4' : 'translate-x-0'
+                          String(record.status).toLowerCase() === 'present' ? 'translate-x-4' : 'translate-x-0'
                         }`} />
                       </button>
                     </div>
