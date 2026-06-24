@@ -41,6 +41,7 @@ class User(Base):
     # Relationships
     courses_taught = relationship("Course", back_populates="instructor", foreign_keys="Course.instructor_id")
     student_record = relationship("Student", back_populates="user", uselist=False, foreign_keys="Student.user_id")
+    counselor_batches = relationship("CounselorBatch", back_populates="counselor")
     audit_logs = relationship("AuditLog", back_populates="user", foreign_keys="AuditLog.user_id")
     attendance_modifications = relationship("Attendance", back_populates="modified_by_user", foreign_keys="Attendance.modified_by_id")
 

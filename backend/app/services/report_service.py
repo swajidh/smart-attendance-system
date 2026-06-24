@@ -161,6 +161,7 @@ async def get_at_risk_students(
     db: AsyncSession,
     threshold: float = 75.0,
     department: Optional[str] = None,
+    student_ids: Optional[list[UUID]] = None,
 ) -> list[dict]:
     """
     Return students whose overall attendance is below `threshold`%.
@@ -184,6 +185,8 @@ async def get_at_risk_students(
     at_risk = []
     for row in rows:
         if row.total == 0:
+            continue
+        if student_ids is not None and row.student_id not in student_ids:
             continue
         pct = round(row.present / row.total * 100, 1)
         if pct < threshold:
@@ -307,9 +310,15 @@ async def get_last_seen(db: AsyncSession, session_id: UUID) -> list[dict]:
 
 # ── Dashboard summary helper ───────────────────────────────────────────────────
 
-async def get_dashboard_summary(db: AsyncSession) -> dict:
+async def get_dashboard_summary(
+    db: AsyncSession,
+    student_ids: Optional[list[UUID]] = None,
+) -> dict:
     """Lightweight summary for DashboardHome."""
-    students_count = (await db.execute(select(func.count()).select_from(Student))).scalar() or 0
+    if student_ids is not None:
+        students_count = len(student_ids)
+    else:
+        students_count = (await db.execute(select(func.count()).select_from(Student))).scalar() or 0
     courses_count = (await db.execute(select(func.count()).select_from(Course))).scalar() or 0
 
     # Recent closed sessions (last 5)

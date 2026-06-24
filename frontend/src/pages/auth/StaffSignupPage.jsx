@@ -3,13 +3,36 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import { ROLE_SHORT_DESCRIPTIONS } from '../../config/roles';
 
-export default function SignupPage() {
+const STAFF_ROLES = [
+  { id: 'admin', label: 'Administrator' },
+  { id: 'teacher', label: 'Teacher' },
+  { id: 'counselor', label: 'Counselor' },
+];
+
+const inputClass = (hasError) =>
+  `px-3.5 py-2.5 border rounded-xl text-[14.5px] bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all ${
+    hasError
+      ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
+      : 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500'
+  }`;
+
+export default function StaffSignupPage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    staffKey: '',
+    role: 'teacher',
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
+
+  const selectedRole = STAFF_ROLES.find((r) => r.id === form.role) ?? STAFF_ROLES[1];
 
   const validate = () => {
     const e = {};
@@ -19,6 +42,8 @@ export default function SignupPage() {
     if (!form.password) e.password = 'Password is required';
     else if (form.password.length < 8) e.password = 'Password must be at least 8 characters';
     if (form.confirmPassword !== form.password) e.confirmPassword = 'Passwords do not match';
+    if (!form.staffKey.trim()) e.staffKey = 'Staff registration key is required';
+    if (!form.role) e.role = 'Select a role';
     return e;
   };
 
@@ -34,17 +59,18 @@ export default function SignupPage() {
 
     setIsLoading(true);
     try {
-      await api.post('/auth/register', {
+      await api.post('/auth/register/staff', {
         name: form.name,
         email: form.email,
         password: form.password,
-        role: 'student',
+        role: form.role,
+        staff_key: form.staffKey,
       });
       toast.success('Account created! Please sign in.');
       navigate('/login');
     } catch (err) {
       const msg = err.response?.data?.detail || 'Registration failed. Try again.';
-      toast.error(msg);
+      toast.error(typeof msg === 'string' ? msg : 'Registration failed.');
     } finally {
       setIsLoading(false);
     }
@@ -62,14 +88,38 @@ export default function SignupPage() {
 
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
         <div className="mb-7">
-          <h1 className="text-2xl font-bold text-slate-900">Student registration</h1>
-          <p className="text-sm text-slate-500 mt-1">Create a student account to access your personal portal</p>
-          <p className="text-xs text-slate-400 mt-2">
-            Students use the personal portal only — not the staff dashboard.
+          <h1 className="text-2xl font-bold text-slate-900">Staff registration</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Register as admin, teacher, or counselor to access the dashboard
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+          {/* Role */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-slate-700">Role</label>
+            <div className="grid grid-cols-1 gap-2">
+              {STAFF_ROLES.map((role) => (
+                <button
+                  key={role.id}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, role: role.id }))}
+                  className={`px-3 py-3 rounded-xl text-left border transition-all ${
+                    form.role === role.id
+                      ? 'bg-blue-50 text-blue-800 border-blue-300 ring-1 ring-blue-200'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-200'
+                  }`}
+                >
+                  <span className="text-sm font-semibold block">{role.label}</span>
+                  <span className="text-xs text-slate-500 mt-0.5 block">
+                    {ROLE_SHORT_DESCRIPTIONS[role.id]}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {errors.role && <p className="text-sm text-red-500">{errors.role}</p>}
+          </div>
+
           {/* Name */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-semibold text-slate-700">Full name</label>
@@ -78,13 +128,9 @@ export default function SignupPage() {
               name="name"
               value={form.name}
               onChange={handleChange}
-              placeholder="Jane Doe"
+              placeholder="Dr. Jane Smith"
               autoComplete="name"
-              className={`px-3.5 py-2.5 border rounded-xl text-[14.5px] bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all ${
-                errors.name
-                  ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
-                  : 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500'
-              }`}
+              className={inputClass(errors.name)}
             />
             {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
           </div>
@@ -99,13 +145,29 @@ export default function SignupPage() {
               onChange={handleChange}
               placeholder="jane@school.edu"
               autoComplete="email"
-              className={`px-3.5 py-2.5 border rounded-xl text-[14.5px] bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all ${
-                errors.email
-                  ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
-                  : 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500'
-              }`}
+              className={inputClass(errors.email)}
             />
             {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
+          </div>
+
+          {/* Staff key */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-slate-700">Staff registration key</label>
+            <input
+              type="password"
+              name="staffKey"
+              value={form.staffKey}
+              onChange={handleChange}
+              placeholder="Enter staff key"
+              autoComplete="off"
+              className={inputClass(errors.staffKey)}
+            />
+            {!errors.staffKey && (
+              <p className="text-xs text-slate-400">
+                Provided by your institution (local default: AttendAI-Staff-2026)
+              </p>
+            )}
+            {errors.staffKey && <p className="text-sm text-red-500">{errors.staffKey}</p>}
           </div>
 
           {/* Password */}
@@ -119,11 +181,7 @@ export default function SignupPage() {
                 onChange={handleChange}
                 placeholder="Min 8 characters"
                 autoComplete="new-password"
-                className={`w-full px-3.5 py-2.5 pr-11 border rounded-xl text-[14.5px] bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all ${
-                  errors.password
-                    ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
-                    : 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500'
-                }`}
+                className={`w-full pr-11 ${inputClass(errors.password)}`}
               />
               <button
                 type="button"
@@ -146,11 +204,7 @@ export default function SignupPage() {
               onChange={handleChange}
               placeholder="Re-enter your password"
               autoComplete="new-password"
-              className={`px-3.5 py-2.5 border rounded-xl text-[14.5px] bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all ${
-                errors.confirmPassword
-                  ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
-                  : 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500'
-              }`}
+              className={inputClass(errors.confirmPassword)}
             />
             {errors.confirmPassword && <p className="text-sm text-red-500">{errors.confirmPassword}</p>}
           </div>
@@ -161,7 +215,7 @@ export default function SignupPage() {
             className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60 disabled:pointer-events-none mt-2"
           >
             {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isLoading ? 'Creating account…' : 'Create account'}
+            {isLoading ? 'Creating account…' : `Create ${selectedRole.label} account`}
           </button>
         </form>
 
@@ -172,9 +226,9 @@ export default function SignupPage() {
           </Link>
         </p>
         <p className="mt-3 text-center text-sm text-slate-500">
-          Faculty or staff?{' '}
-          <Link to="/staff/signup" className="text-slate-700 hover:text-slate-900 font-medium underline underline-offset-2">
-            Register as admin, teacher, or counselor
+          Are you a student?{' '}
+          <Link to="/signup" className="text-slate-700 hover:text-slate-900 font-medium underline underline-offset-2">
+            Student registration
           </Link>
         </p>
       </div>

@@ -20,6 +20,7 @@ from sqlalchemy import select, func
 
 from app.models.student import Student, EmbeddingStatus
 from app.models.audit_log import AuditLog
+from app.models.user import User, UserRole
 from app.schemas.student import StudentCreate, StudentUpdate
 
 from ml.quality_validator import validate_base64, QualityStatus
@@ -28,6 +29,70 @@ from ml.face_encoder import get_embedding_from_base64, average_embeddings
 logger = logging.getLogger(__name__)
 
 MIN_VALID_SAMPLES = 10  # minimum accepted images for enrollment
+
+
+async def link_user_to_student(db: AsyncSession, user) -> Optional[Student]:
+    """
+    Attach a User account to a Student row.
+    Matches by existing user_id, then by email (case-insensitive).
+    """
+    if not isinstance(user, User):
+        return None
+
+    by_user = await db.execute(select(Student).where(Student.user_id == user.id))
+    linked = by_user.scalar_one_or_none()
+    if linked:
+        return linked
+
+    if not user.email:
+        return None
+
+    email = user.email.strip().lower()
+    by_email = await db.execute(
+        select(Student).where(func.lower(Student.email) == email)
+    )
+    student = by_email.scalar_one_or_none()
+    if not student:
+        return None
+
+    if student.user_id and student.user_id != user.id:
+        return None  # already linked to a different account
+
+    student.user_id = user.id
+    db.add(student)
+    await db.commit()
+    await db.refresh(student)
+    logger.info("Linked user %s to student %s", user.email, student.student_id)
+    return student
+
+
+async def link_student_to_user_by_email(db: AsyncSession, student: Student) -> None:
+    """Link a newly created/updated student row to an existing student User account."""
+    if not student.email or student.user_id:
+        return
+
+    email = student.email.strip().lower()
+    user_q = await db.execute(
+        select(User).where(
+            func.lower(User.email) == email,
+            User.role == UserRole.student,
+        )
+    )
+    user = user_q.scalar_one_or_none()
+    if not user:
+        return
+
+    existing = await db.execute(
+        select(Student).where(Student.user_id == user.id, Student.id != student.id)
+    )
+    if existing.scalar_one_or_none():
+        return
+
+    student.user_id = user.id
+    db.add(student)
+    await db.commit()
+    await db.refresh(student)
+    logger.info("Linked student %s to user %s", student.student_id, user.email)
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -46,6 +111,7 @@ async def create_student(db: AsyncSession, data: StudentCreate) -> Student:
     db.add(student)
     await db.commit()
     await db.refresh(student)
+    await link_student_to_user_by_email(db, student)
     return student
 
 
@@ -83,6 +149,7 @@ async def update_student(db: AsyncSession, student: Student, data: StudentUpdate
     db.add(student)
     await db.commit()
     await db.refresh(student)
+    await link_student_to_user_by_email(db, student)
     return student
 
 

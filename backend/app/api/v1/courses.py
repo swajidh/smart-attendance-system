@@ -18,8 +18,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.api.dependencies import get_db_session, get_current_user, require_role
-from app.models.user import User, UserRole
+from app.api.dependencies import (
+    get_db_session,
+    require_manage_courses,
+    require_courses_read,
+    require_admin,
+)
+from app.models.user import User
 from app.models.course import Course
 from app.models.course_student import CourseStudent
 from app.models.student import Student
@@ -29,14 +34,11 @@ from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse, Cours
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
-_require_teacher_or_admin = require_role(UserRole.teacher, UserRole.admin)
-_require_admin = require_role(UserRole.admin)
-
 
 @router.get("", response_model=list[CourseResponse])
 async def list_courses(
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_courses_read),
 ):
     result = await db.execute(select(Course).order_by(Course.code))
     return result.scalars().all()
@@ -46,7 +48,7 @@ async def list_courses(
 async def create_course(
     data: CourseCreate,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_manage_courses),
 ):
     # Check for duplicate code
     dup = await db.execute(select(Course).where(Course.code == data.code))
@@ -64,7 +66,7 @@ async def create_course(
 async def get_course(
     course_id: UUID,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_courses_read),
 ):
     result = await db.execute(select(Course).where(Course.id == course_id))
     course = result.scalar_one_or_none()
@@ -78,7 +80,7 @@ async def update_course(
     course_id: UUID,
     data: CourseUpdate,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_manage_courses),
 ):
     result = await db.execute(select(Course).where(Course.id == course_id))
     course = result.scalar_one_or_none()
@@ -95,7 +97,7 @@ async def update_course(
 async def delete_course(
     course_id: UUID,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin),
 ):
     result = await db.execute(select(Course).where(Course.id == course_id))
     course = result.scalar_one_or_none()
@@ -109,7 +111,7 @@ async def delete_course(
 async def get_course_detail(
     course_id: UUID,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_courses_read),
 ):
     """Full course detail: course info + enrolled students + per-student attendance stats."""
     result = await db.execute(select(Course).where(Course.id == course_id))
@@ -183,7 +185,7 @@ async def enroll_student(
     course_id: UUID,
     body: CourseEnrollRequest,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_manage_courses),
 ):
     """Enroll an existing student in a course."""
     course = (await db.execute(select(Course).where(Course.id == course_id))).scalar_one_or_none()
@@ -215,7 +217,7 @@ async def unenroll_student(
     course_id: UUID,
     student_id: UUID,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_manage_courses),
 ):
     result = await db.execute(
         select(CourseStudent).where(

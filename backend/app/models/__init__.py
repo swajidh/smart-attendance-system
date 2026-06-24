@@ -34,6 +34,7 @@ from app.models.attendance import Attendance  # noqa: E402, F401
 from app.models.attention_log import AttentionLog  # noqa: E402, F401
 from app.models.alert import Alert  # noqa: E402, F401
 from app.models.audit_log import AuditLog  # noqa: E402, F401
+from app.models.counselor_batch import CounselorBatch  # noqa: E402, F401
 
 
 async def get_db():

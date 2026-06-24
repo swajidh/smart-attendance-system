@@ -44,6 +44,11 @@ class Student(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
+    # Counselor intake batch (~40 students per incoming cohort)
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("counselor_batches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
@@ -53,6 +58,7 @@ class Student(Base):
 
     # Relationships
     user = relationship("User", back_populates="student_record", foreign_keys=[user_id])
+    counselor_batch = relationship("CounselorBatch", back_populates="students")
     course_enrollments = relationship("CourseStudent", back_populates="student", cascade="all, delete-orphan")
     attendance_records = relationship("Attendance", back_populates="student", cascade="all, delete-orphan")
     attention_logs = relationship("AttentionLog", back_populates="student", cascade="all, delete-orphan")

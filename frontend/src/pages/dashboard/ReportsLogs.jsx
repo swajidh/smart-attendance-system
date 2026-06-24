@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   FileText,
   Download,
@@ -35,6 +36,11 @@ import api from '../../services/api';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export default function ReportsLogs() {
+  const [searchParams] = useSearchParams();
+  const storedUser = JSON.parse(localStorage.getItem('smart_attendance_user') || '{}');
+  const userRole = storedUser?.role || '';
+  const isCounselor = userRole === 'counselor';
+
   // ── state ────────────────────────────────────────────────────────────────
   const [summary, setSummary] = useState(null);
   const [courses, setCourses] = useState([]);
@@ -52,6 +58,8 @@ export default function ReportsLogs() {
 
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [batches, setBatches] = useState([]);
+  const [batchId, setBatchId] = useState(searchParams.get('batch_id') || '');
 
   // ── data fetching ─────────────────────────────────────────────────────────
   const buildParams = () => {
@@ -65,11 +73,13 @@ export default function ReportsLogs() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     const params = buildParams();
+    const batchQ = batchId ? `batch_id=${batchId}` : '';
+    const atRiskUrl = batchQ ? `/reports/at-risk?${batchQ}` : '/reports/at-risk';
     try {
       const [summaryRes, trendRes, atRiskRes, coursesRes] = await Promise.allSettled([
         api.get(`/reports/attendance${params ? '?' + params : ''}`),
         api.get(`/reports/trends?period=${filterPeriod}${filterCourse !== 'all' ? '&course_id=' + filterCourse : ''}`),
-        api.get('/reports/at-risk'),
+        api.get(atRiskUrl),
         api.get('/courses'),
       ]);
 
@@ -83,7 +93,17 @@ export default function ReportsLogs() {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterCourse, filterPeriod, startDate, endDate]);
+  }, [filterCourse, filterPeriod, startDate, endDate, batchId]);
+
+  useEffect(() => {
+    if (!isCounselor) return;
+    api.get('/batches/mine')
+      .then((res) => {
+        setBatches(res.data);
+        if (!batchId && res.data.length > 0) setBatchId(res.data[0].id);
+      })
+      .catch(() => {});
+  }, [isCounselor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -178,7 +198,18 @@ export default function ReportsLogs() {
         title="Reports & Analytics"
         description="Converting raw classroom activity into academic intelligence and audit trails."
         actions={
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            {isCounselor && batches.length > 0 && (
+              <select
+                value={batchId}
+                onChange={(e) => setBatchId(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700"
+              >
+                {batches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
             <Button
               variant="outline"
               icon={Download}

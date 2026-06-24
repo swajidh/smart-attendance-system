@@ -40,6 +40,7 @@ from sqlalchemy.ext.asyncio import (
 from app.main import app
 from app.models import Base
 from app.api.dependencies import get_db_session
+from app.config import settings
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test database URL
@@ -148,11 +149,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 @pytest_asyncio.fixture
 async def admin_token(client: AsyncClient) -> str:
     """Register an admin user and return a Bearer token."""
-    await client.post("/api/v1/auth/register", json={
+    await client.post("/api/v1/auth/register/staff", json={
         "email": "admin@test.local",
         "password": "Admin1234!",
-        "full_name": "Test Admin",
+        "name": "Test Admin",
         "role": "admin",
+        "staff_key": settings.STAFF_REGISTRATION_KEY,
     })
     resp = await client.post("/api/v1/auth/login", json={
         "email": "admin@test.local",
@@ -164,11 +166,12 @@ async def admin_token(client: AsyncClient) -> str:
 
 @pytest_asyncio.fixture
 async def teacher_token(client: AsyncClient) -> str:
-    await client.post("/api/v1/auth/register", json={
+    await client.post("/api/v1/auth/register/staff", json={
         "email": "teacher@test.local",
         "password": "Teacher1234!",
-        "full_name": "Test Teacher",
+        "name": "Test Teacher",
         "role": "teacher",
+        "staff_key": settings.STAFF_REGISTRATION_KEY,
     })
     resp = await client.post("/api/v1/auth/login", json={
         "email": "teacher@test.local",
@@ -179,12 +182,28 @@ async def teacher_token(client: AsyncClient) -> str:
 
 
 @pytest_asyncio.fixture
+async def counselor_token(client: AsyncClient) -> str:
+    await client.post("/api/v1/auth/register/staff", json={
+        "email": "counselor@test.local",
+        "password": "Counselor1234!",
+        "name": "Test Counselor",
+        "role": "counselor",
+        "staff_key": settings.STAFF_REGISTRATION_KEY,
+    })
+    resp = await client.post("/api/v1/auth/login", json={
+        "email": "counselor@test.local",
+        "password": "Counselor1234!",
+    })
+    assert resp.status_code == 200, resp.text
+    return resp.json()["access_token"]
+
+
+@pytest_asyncio.fixture
 async def student_token(client: AsyncClient) -> str:
     await client.post("/api/v1/auth/register", json={
         "email": "student@test.local",
         "password": "Student1234!",
-        "full_name": "Test Student",
-        "role": "student",
+        "name": "Test Student",
     })
     resp = await client.post("/api/v1/auth/login", json={
         "email": "student@test.local",

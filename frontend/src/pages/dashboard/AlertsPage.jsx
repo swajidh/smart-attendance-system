@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Bell,
@@ -59,7 +60,14 @@ const scatterFill = {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 export default function AlertsPage() {
+  const [searchParams] = useSearchParams();
+  const storedUser = JSON.parse(localStorage.getItem('smart_attendance_user') || '{}');
+  const userRole = storedUser?.role || '';
+  const isCounselor = userRole === 'counselor';
+
   const [tab, setTab] = useState('alerts');  // alerts | risk | correlation | settings
+  const [batches, setBatches] = useState([]);
+  const [batchId, setBatchId] = useState(searchParams.get('batch_id') || '');
   const [alerts, setAlerts] = useState([]);
   const [riskList, setRiskList] = useState([]);
   const [correlation, setCorrelation] = useState([]);
@@ -72,10 +80,11 @@ export default function AlertsPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    const batchParam = batchId ? `&batch_id=${batchId}` : '';
     const [alertsRes, riskRes, corrRes, coursesRes, notifRes] = await Promise.allSettled([
-      api.get(`/alerts?resolved=${filterResolved}&limit=200`),
-      api.get('/alerts/risk-list'),
-      api.get('/reports/correlation/batch?limit=200'),
+      api.get(`/alerts?resolved=${filterResolved}&limit=200${batchParam}`),
+      api.get(`/alerts/risk-list${batchId ? `?batch_id=${batchId}` : ''}`),
+      api.get(`/reports/correlation/batch?limit=200${batchId ? `&batch_id=${batchId}` : ''}`),
       api.get('/courses'),
       api.get('/alerts/notifications'),
     ]);
@@ -94,7 +103,19 @@ export default function AlertsPage() {
       );
       setThresholds(threshRes.filter(Boolean).map(r => r.data));
     }
-  }, [filterResolved]);
+  }, [filterResolved, batchId]);
+
+  useEffect(() => {
+    if (!isCounselor) return;
+    api.get('/batches/mine')
+      .then((res) => {
+        setBatches(res.data);
+        if (!batchId && res.data.length > 0) {
+          setBatchId(res.data[0].id);
+        }
+      })
+      .catch(() => {});
+  }, [isCounselor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -135,9 +156,22 @@ export default function AlertsPage() {
         title="Alerts & Intervention"
         description="Real-time engagement alerts, risk identification, and academic intervention tools."
         actions={
-          <Button variant="outline" icon={RefreshCw} onClick={fetchAll} disabled={loading}>
-            {loading ? 'Loading…' : 'Refresh'}
-          </Button>
+          <div className="flex items-center gap-3">
+            {isCounselor && batches.length > 0 && (
+              <select
+                value={batchId}
+                onChange={(e) => setBatchId(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700"
+              >
+                {batches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
+            <Button variant="outline" icon={RefreshCw} onClick={fetchAll} disabled={loading}>
+              {loading ? 'Loading…' : 'Refresh'}
+            </Button>
+          </div>
         }
       />
 

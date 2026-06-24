@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, Camera, Mail, Shield, Loader2, Save } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import { getRoleLabel, ROLE_DESCRIPTIONS } from '../../config/roles';
 
 export default function ProfilePage() {
   const [user, setUser] = useState(null);
@@ -128,11 +129,25 @@ export default function ProfilePage() {
 
             <div className="mt-6 text-center">
               <h3 className="text-xl font-bold">{user?.name || 'User Name'}</h3>
-              <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary capitalize">
+              <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                 <Shield className="w-3 h-3 mr-1" />
-                {user?.role || 'Role'}
+                {getRoleLabel(user?.role)}
               </div>
             </div>
+
+            {user?.role && ROLE_DESCRIPTIONS[user.role] && (
+              <div className="w-full mt-6 p-4 bg-slate-50 rounded-xl border border-slate-100 text-left">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Your role</p>
+                <ul className="space-y-1.5">
+                  {ROLE_DESCRIPTIONS[user.role].map((line) => (
+                    <li key={line} className="text-xs text-slate-600 flex gap-2">
+                      <span className="text-blue-500 shrink-0">•</span>
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             
             <div className="w-full mt-6 space-y-3">
               <div className="flex items-center text-sm text-muted-foreground">

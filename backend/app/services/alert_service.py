@@ -183,12 +183,17 @@ async def get_alerts(
     alert_type: Optional[str] = None,
     resolved: Optional[bool] = None,
     limit: int = 100,
+    student_ids: Optional[list[UUID]] = None,
 ) -> list[dict]:
     q = select(Alert, Student).outerjoin(
         Student, Alert.student_id == Student.id
     )
     if student_id:
         q = q.where(Alert.student_id == student_id)
+    if student_ids is not None:
+        if not student_ids:
+            return []
+        q = q.where(Alert.student_id.in_(student_ids))
     if alert_type:
         q = q.where(Alert.alert_type == alert_type)
     if resolved is not None:
@@ -230,7 +235,11 @@ def _alert_to_dict(alert: Alert, student: Optional[Student]) -> dict:
 # 7.5  Risk list — students with repeated weekly issues
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def generate_risk_list(db: AsyncSession, weeks: int = 4) -> list[dict]:
+async def generate_risk_list(
+    db: AsyncSession,
+    weeks: int = 4,
+    student_ids: Optional[list[UUID]] = None,
+) -> list[dict]:
     """
     Combine at-risk attendance (< 75%) and repeated low-engagement
     from the last N weeks into a unified risk list, sorted by risk level.
@@ -242,7 +251,7 @@ async def generate_risk_list(db: AsyncSession, weeks: int = 4) -> list[dict]:
     cutoff = datetime.now(timezone.utc) - timedelta(weeks=weeks)
 
     # --- At-risk attendance ---
-    at_risk_att = await get_at_risk_students(db, threshold=75.0)
+    at_risk_att = await get_at_risk_students(db, threshold=75.0, student_ids=student_ids)
     att_map: dict[str, dict] = {r["student_id"]: r for r in at_risk_att}
 
     # --- Low-engagement sessions per student ---
@@ -257,8 +266,12 @@ async def generate_risk_list(db: AsyncSession, weeks: int = 4) -> list[dict]:
             AttentionLog.timestamp >= cutoff,
             Session.status == SessionStatus.closed,
         )
-        .group_by(AttentionLog.student_id, AttentionLog.session_id)
     )
+    if student_ids is not None:
+        if not student_ids:
+            return []
+        eng_q = eng_q.where(AttentionLog.student_id.in_(student_ids))
+    eng_q = eng_q.group_by(AttentionLog.student_id, AttentionLog.session_id)
     eng_rows = (await db.execute(eng_q)).all()
 
     # Count sessions where avg attention < threshold per student
@@ -273,6 +286,9 @@ async def generate_risk_list(db: AsyncSession, weeks: int = 4) -> list[dict]:
 
     # --- Build unified risk list ---
     all_student_ids = set(att_map) | set(eng_low)
+    if student_ids is not None:
+        allowed = {str(sid) for sid in student_ids}
+        all_student_ids = all_student_ids & allowed
     if not all_student_ids:
         return []
 
