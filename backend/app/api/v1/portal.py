@@ -28,10 +28,29 @@ from app.models.course_student import CourseStudent
 from app.models.attendance import Attendance, AttendanceStatus
 from app.models.attention_log import AttentionLog
 from app.models.session import Session, SessionStatus
+from app.services import student_service
 
 router = APIRouter(prefix="/portal", tags=["portal"])
 
 _STUDENT = [Depends(require_role(UserRole.student))]
+
+
+def _normalize_overall(pct_data: dict) -> dict:
+    """Map report_service field names to portal frontend expectations."""
+    per_course = []
+    for c in pct_data.get("per_course", []):
+        per_course.append({
+            **c,
+            "attendance_pct": c.get("attendance_pct", 0),
+            "present_sessions": c.get("present", 0),
+            "total_sessions": c.get("total", 0),
+        })
+    return {
+        **pct_data,
+        "overall_percentage": pct_data.get("overall_attendance_pct", 0.0),
+        "overall_attendance_pct": pct_data.get("overall_attendance_pct", 0.0),
+        "per_course": per_course,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -42,6 +61,10 @@ async def _get_own_student(
     db: AsyncSession,
     current_user: User,
 ) -> Student:
+    student = await student_service.link_user_to_student(db, current_user)
+    if student:
+        return student
+
     result = await db.execute(
         select(Student).where(Student.user_id == current_user.id)
     )
@@ -51,7 +74,8 @@ async def _get_own_student(
             status_code=404,
             detail=(
                 "No student record linked to your account. "
-                "Ask an administrator to link your user account to a student record."
+                "Ask an administrator to register you as a student using the same email, "
+                "then sign in again."
             ),
         )
     return student
@@ -104,23 +128,22 @@ async def portal_attendance(
     from app.services.report_service import get_student_percentage
     pct_data = await get_student_percentage(db, sid)
 
-    # All attendance records (recent 90 days) for calendar
+    # Calendar + monthly: all sessions with attendance records (incl. active)
     cutoff = datetime.now(timezone.utc) - timedelta(days=90)
     records_q = await db.execute(
         select(Attendance, Session)
         .join(Session, Attendance.session_id == Session.id)
         .where(
             Attendance.student_id == sid,
-            Session.status == SessionStatus.closed,
-            Session.started_at >= cutoff,
+            Session.start_time >= cutoff,
         )
-        .order_by(Session.started_at.desc())
+        .order_by(Session.start_time.desc())
     )
     records = records_q.all()
 
     calendar_data = [
         {
-            "date": r.Session.started_at.date().isoformat(),
+            "date": r.Session.start_time.isoformat(),
             "status": r.Attendance.status.value,
             "course_id": str(r.Session.course_id) if r.Session.course_id else None,
             "session_id": str(r.Session.id),
@@ -131,7 +154,7 @@ async def portal_attendance(
     # Monthly breakdown (last 6 months)
     monthly: dict[str, dict] = {}
     for row in records:
-        month = row.Session.started_at.strftime("%Y-%m")
+        month = row.Session.start_time.strftime("%Y-%m")
         if month not in monthly:
             monthly[month] = {"month": month, "present": 0, "absent": 0, "total": 0}
         monthly[month]["total"] += 1
@@ -147,7 +170,7 @@ async def portal_attendance(
         )
 
     return {
-        "overall": pct_data,
+        "overall": _normalize_overall(pct_data),
         "calendar": calendar_data,
         "monthly": monthly_list,
     }
@@ -177,7 +200,7 @@ async def portal_attention(
         .join(Session, AttentionLog.session_id == Session.id)
         .where(
             AttentionLog.student_id == sid,
-            Session.status == SessionStatus.closed,
+            Session.status.in_([SessionStatus.closed, SessionStatus.active]),
         )
     )
     overall_avg = round(float(overall_q.scalar() or 0), 1)
@@ -194,7 +217,7 @@ async def portal_attention(
         .where(
             AttentionLog.student_id == sid,
             AttentionLog.timestamp >= eight_weeks_ago,
-            Session.status == SessionStatus.closed,
+            Session.status.in_([SessionStatus.closed, SessionStatus.active]),
         )
         .group_by("week")
         .order_by("week")
@@ -212,7 +235,7 @@ async def portal_attention(
     session_q = await db.execute(
         select(
             Session.id,
-            Session.started_at,
+            Session.start_time,
             Course.name.label("course_name"),
             Course.code.label("course_code"),
             func.avg(AttentionLog.score).label("avg_score"),
@@ -221,16 +244,16 @@ async def portal_attention(
         .outerjoin(Course, Session.course_id == Course.id)
         .where(
             AttentionLog.student_id == sid,
-            Session.status == SessionStatus.closed,
+            Session.status.in_([SessionStatus.closed, SessionStatus.active]),
         )
-        .group_by(Session.id, Session.started_at, Course.name, Course.code)
-        .order_by(Session.started_at.desc())
+        .group_by(Session.id, Session.start_time, Course.name, Course.code)
+        .order_by(Session.start_time.desc())
         .limit(20)
     )
     sessions = [
         {
             "session_id": str(row.id),
-            "date": row.started_at.strftime("%Y-%m-%d") if row.started_at else None,
+            "date": row.start_time.strftime("%Y-%m-%d") if row.start_time else None,
             "course_name": row.course_name or "Unknown",
             "course_code": row.course_code or "—",
             "avg_score": round(float(row.avg_score), 1),
@@ -271,17 +294,17 @@ async def portal_courses(
 
     result = []
     for course in courses:
-        # Total closed sessions for this course
+        # Total sessions for this course (active + closed)
         total_q = await db.execute(
             select(func.count(Session.id))
             .where(
                 Session.course_id == course.id,
-                Session.status == SessionStatus.closed,
+                Session.status.in_([SessionStatus.closed, SessionStatus.active]),
             )
         )
         total = total_q.scalar() or 0
 
-        # Student's present count
+        # Student's present count (includes active sessions)
         present_q = await db.execute(
             select(func.count(Attendance.id))
             .join(Session, Attendance.session_id == Session.id)
@@ -289,7 +312,7 @@ async def portal_courses(
                 Attendance.student_id == sid,
                 Session.course_id == course.id,
                 Attendance.status == AttendanceStatus.present,
-                Session.status == SessionStatus.closed,
+                Session.status.in_([SessionStatus.closed, SessionStatus.active]),
             )
         )
         present = present_q.scalar() or 0
@@ -302,7 +325,7 @@ async def portal_courses(
             .where(
                 AttentionLog.student_id == sid,
                 Session.course_id == course.id,
-                Session.status == SessionStatus.closed,
+                Session.status.in_([SessionStatus.closed, SessionStatus.active]),
             )
         )
         avg_attention = round(float(attn_q.scalar() or 0), 1)

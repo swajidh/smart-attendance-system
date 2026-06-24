@@ -16,9 +16,20 @@ import Card, { CardContent } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import api from '../../services/api';
+import { canAccess, getRoleLabel, PERMISSIONS } from '../../config/roles';
+
+const WELCOME_BY_ROLE = {
+  admin: 'Administrator',
+  teacher: 'Instructor',
+  counselor: 'Counselor',
+};
 
 export default function DashboardHome() {
   const navigate = useNavigate();
+  const storedUser = JSON.parse(localStorage.getItem('smart_attendance_user') || '{}');
+  const userRole = storedUser?.role || 'teacher';
+  const canRunLive = canAccess(userRole, PERMISSIONS.live_sessions);
+  const canManageCourses = canAccess(userRole, PERMISSIONS.manage_courses);
   const [data, setData] = useState({
     totalStudents: 0,
     activeCourses: 0,
@@ -61,8 +72,14 @@ export default function DashboardHome() {
     <div className="space-y-8 max-w-[1400px] mx-auto pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Welcome back, Instructor</h1>
-          <p className="text-slate-500 mt-1">System is synchronized. All modules are reporting active.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            Welcome back, {WELCOME_BY_ROLE[userRole] || getRoleLabel(userRole)}
+          </h1>
+          <p className="text-slate-500 mt-1">
+            {userRole === 'counselor'
+              ? 'Monitor your assigned student batch — alerts, reports, and attention analytics.'
+              : 'System is synchronized. All modules are reporting active.'}
+          </p>
         </div>
         <div className="flex gap-3">
           <Button
@@ -72,14 +89,25 @@ export default function DashboardHome() {
           >
             View Reports
           </Button>
-          <Button
-            variant="primary"
-            icon={Play}
-            onClick={() => navigate('/dashboard/live')}
-            className="shadow-lg shadow-blue-500/20 py-6 px-8 rounded-2xl text-lg"
-          >
-            Start Live Session
-          </Button>
+          {canRunLive && (
+            <Button
+              variant="primary"
+              icon={Play}
+              onClick={() => navigate('/dashboard/live')}
+              className="shadow-lg shadow-blue-500/20 py-6 px-8 rounded-2xl text-lg"
+            >
+              Start Live Session
+            </Button>
+          )}
+          {userRole === 'counselor' && (
+            <Button
+              variant="primary"
+              onClick={() => navigate('/dashboard/my-batch')}
+              className="shadow-lg shadow-blue-500/20 py-6 px-8 rounded-2xl text-lg"
+            >
+              View My Batch
+            </Button>
+          )}
         </div>
       </div>
 
@@ -106,6 +134,7 @@ export default function DashboardHome() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           {/* Hero CTA */}
+          {canRunLive ? (
           <Card className="border-slate-100 shadow-sm rounded-[32px] overflow-hidden">
             <div className="p-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white relative">
               <div className="relative z-10">
@@ -129,6 +158,24 @@ export default function DashboardHome() {
               <Eye className="absolute right-0 bottom-0 w-64 h-64 text-white/10 -mr-10 -mb-10" />
             </div>
           </Card>
+          ) : (
+          <Card className="border-slate-100 shadow-sm rounded-[32px] overflow-hidden">
+            <div className="p-8 bg-gradient-to-br from-slate-700 to-slate-800 text-white relative">
+              <div className="relative z-10">
+                <h3 className="text-2xl font-bold mb-2">Student Monitoring</h3>
+                <p className="text-slate-300 mb-6 max-w-md">
+                  Review at-risk students, attention trends, and attendance reports. You have read-only access as a counselor.
+                </p>
+                <button
+                  onClick={() => navigate('/dashboard/my-batch')}
+                  className="bg-white text-slate-800 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-100 transition-colors"
+                >
+                  View My Batch <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </Card>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Recent Sessions */}
@@ -251,6 +298,7 @@ export default function DashboardHome() {
                   </div>
                 )}
               </div>
+              {canManageCourses && (
               <div className="p-4 bg-slate-50/50">
                 <button
                   onClick={() => navigate('/dashboard/courses')}
@@ -259,6 +307,7 @@ export default function DashboardHome() {
                   Manage All Courses
                 </button>
               </div>
+              )}
             </CardContent>
           </Card>
 

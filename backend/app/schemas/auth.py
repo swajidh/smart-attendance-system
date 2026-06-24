@@ -21,6 +21,28 @@ class RegisterRequest(BaseModel):
         return v
 
 
+class StaffRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    role: UserRole
+    staff_key: str
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def staff_role_only(cls, v: UserRole) -> UserRole:
+        if v not in (UserRole.admin, UserRole.teacher, UserRole.counselor):
+            raise ValueError("Staff registration supports admin, teacher, or counselor only")
+        return v
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.models import get_db
 from app.models.user import User, UserRole
+from app.core.permissions import Permission, user_has_permission, roles_with_permission
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=True)
 
@@ -67,9 +68,39 @@ def require_role(*roles: UserRole) -> Callable:
     return role_checker
 
 
+def require_permission(permission: Permission) -> Callable:
+    """Return a FastAPI dependency that checks a canonical permission."""
+
+    async def permission_checker(current_user: User = Depends(get_current_user)) -> User:
+        if not user_has_permission(current_user, permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission denied: {permission.value}",
+            )
+        return current_user
+
+    return permission_checker
+
+
 # Convenience role dependencies
 require_admin = require_role(UserRole.admin)
 require_admin_or_teacher = require_role(UserRole.admin, UserRole.teacher)
 require_admin_teacher_or_counselor = require_role(
     UserRole.admin, UserRole.teacher, UserRole.counselor
 )
+
+# Permission-based dependencies (canonical matrix)
+require_live_sessions = require_permission(Permission.live_sessions)
+require_attendance_override = require_permission(Permission.attendance_override)
+require_sessions_read = require_permission(Permission.sessions_read)
+require_manage_students = require_permission(Permission.manage_students)
+require_students_read = require_permission(Permission.students_read)
+require_manage_courses = require_permission(Permission.manage_courses)
+require_courses_read = require_permission(Permission.courses_read)
+require_alerts = require_permission(Permission.alerts)
+require_reports_read = require_permission(Permission.reports_read)
+require_export_reports = require_permission(Permission.export_reports)
+require_attention_read = require_permission(Permission.attention_read)
+require_system_admin = require_permission(Permission.system_admin)
+require_batches_read = require_permission(Permission.batches_read)
+require_batches_manage = require_permission(Permission.batches_manage)

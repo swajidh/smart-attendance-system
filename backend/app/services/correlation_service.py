@@ -87,13 +87,20 @@ async def get_batch_correlation(
     db: AsyncSession,
     department: Optional[str] = None,
     limit: int = 100,
+    batch_id: Optional[UUID] = None,
+    student_ids: Optional[list[UUID]] = None,
 ) -> list[dict]:
     """
-    Return correlation data for all students (optionally filtered by department).
+    Return correlation data for students (optionally filtered by department or batch).
     Only students with ≥1 closed session are included.
     """
-    # Get all students
     q = select(Student)
+    if batch_id:
+        q = q.where(Student.batch_id == batch_id)
+    elif student_ids is not None:
+        if not student_ids:
+            return []
+        q = q.where(Student.id.in_(student_ids))
     if department:
         q = q.where(Student.department.ilike(f"%{department}%"))
     q = q.limit(limit)

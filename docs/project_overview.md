@@ -118,12 +118,14 @@ smart-attendance-system/
 
 ## User Roles
 
+See **[roles.md](roles.md)** for the full permission matrix, registration flows, and implementation details.
+
 | Role | Access |
 |------|--------|
-| `admin` | All features including system admin, SIS import, backup, user management |
-| `teacher` | Course/session management, attendance override, reports, alerts |
-| `counselor` | Read-only alerts, risk list, correlation reports |
-| `student` | Personal portal (`/portal`) only — own data, read-only |
+| `student` | Personal portal (`/portal`) only — own attendance, attention, and courses (read-only) |
+| `counselor` | Dashboard read-only — alerts, at-risk lists, reports, correlation, attention analytics |
+| `teacher` | Live sessions, student/course management, face enrollment, reports & exports, alerts |
+| `admin` | All teacher capabilities plus user management, system settings, backup, SIS import, audit logs |
 
 ---
 

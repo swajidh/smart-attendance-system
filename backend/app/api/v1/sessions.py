@@ -25,8 +25,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db_session, get_current_user, require_role
-from app.models.user import User, UserRole
+from app.api.dependencies import (
+    get_db_session,
+    require_live_sessions,
+    require_sessions_read,
+    require_attendance_override,
+)
+from app.models.user import User
 from app.models.session import SessionStatus
 from app.models.attendance import AttendanceStatus
 from app.schemas.session import (
@@ -43,8 +48,6 @@ from app.services import session_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_require_teacher_or_admin = require_role(UserRole.teacher, UserRole.admin)
 
 try:
     from ml.face_encoder import get_embedding_from_base64, compute_live_probe_embedding
@@ -126,7 +129,7 @@ def _build_roster_record(attendance, student) -> dict:
 async def create_session(
     data: SessionCreate,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_live_sessions),
 ):
     try:
         session = await session_service.create_session(db, data.course_id, current_user)
@@ -155,7 +158,7 @@ async def list_sessions(
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_sessions_read),
 ):
     from sqlalchemy import select
     from app.models.course import Course
@@ -173,7 +176,7 @@ async def list_sessions(
 async def get_session(
     session_id: UUID,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_sessions_read),
 ):
     from sqlalchemy import select
     from app.models.course import Course
@@ -195,7 +198,7 @@ async def get_session(
 async def close_session(
     session_id: UUID,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_live_sessions),
 ):
     from sqlalchemy import select
     from app.models.course import Course
@@ -214,7 +217,7 @@ async def close_session(
 async def get_session_unknowns(
     session_id: UUID,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_sessions_read),
 ):
     session = await session_service.get_session(db, session_id)
     if not session:
@@ -231,7 +234,7 @@ async def manual_override(
     record_id: UUID,
     body: ManualOverrideRequest,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_attendance_override),
 ):
     from sqlalchemy import select
     from app.models.attendance import Attendance
@@ -311,6 +314,12 @@ async def detect_websocket(
         if user is None:
             await websocket.send_text(json.dumps({"error": "Unauthorized"}))
             await websocket.close(code=4001)
+            return
+
+        from app.core.permissions import Permission, user_has_permission
+        if not user_has_permission(user, Permission.live_sessions):
+            await websocket.send_text(json.dumps({"error": "Forbidden — live sessions require teacher or admin role"}))
+            await websocket.close(code=4003)
             return
 
         session = await session_service.get_session(db, session_id)

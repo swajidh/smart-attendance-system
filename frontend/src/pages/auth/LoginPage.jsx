@@ -59,7 +59,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
         <div className="mb-7">
           <h1 className="text-2xl font-bold text-slate-900">Sign in</h1>
-          <p className="text-sm text-slate-500 mt-1">Enter your credentials to access the dashboard</p>
+          <p className="text-sm text-slate-500 mt-1">Students are redirected to the personal portal; staff access the dashboard</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -129,7 +129,11 @@ export default function LoginPage() {
         <p className="mt-6 text-center text-sm text-slate-500">
           Don&apos;t have an account?{' '}
           <Link to="/signup" className="text-blue-600 hover:text-blue-700 font-medium">
-            Create one
+            Student sign up
+          </Link>
+          {' · '}
+          <Link to="/staff/signup" className="text-slate-700 hover:text-slate-900 font-medium">
+            Staff registration
           </Link>
         </p>
       </div>

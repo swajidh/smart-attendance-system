@@ -67,6 +67,13 @@ export default function SystemSettings() {
   const [importResult, setImportResult] = useState(null);
   const sisFileRef = useRef(null);
 
+  // Counselor batches
+  const [batches, setBatches] = useState([]);
+  const [batchesLoading, setBatchesLoading] = useState(false);
+  const [batchImporting, setBatchImporting] = useState(false);
+  const [batchImportResult, setBatchImportResult] = useState(null);
+  const batchFileRef = useRef(null);
+
   // Backup
   const [backing, setBacking] = useState(false);
 
@@ -112,12 +119,22 @@ export default function SystemSettings() {
     } catch { /* silent */ }
   }, []);
 
+  const fetchBatches = useCallback(async () => {
+    setBatchesLoading(true);
+    try {
+      const res = await api.get('/batches');
+      setBatches(res.data);
+    } catch { toast.error('Could not load counselor batches'); }
+    finally { setBatchesLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (tab === 'users') fetchUsers();
     else if (tab === 'health') fetchHealth();
     else if (tab === 'audit') fetchAuditLog();
     else if (tab === 'notifications') fetchNotifPrefs();
-  }, [tab, fetchUsers, fetchHealth, fetchAuditLog, fetchNotifPrefs]);
+    else if (tab === 'batches') fetchBatches();
+  }, [tab, fetchUsers, fetchHealth, fetchAuditLog, fetchNotifPrefs, fetchBatches]);
 
   // ── Role update ──────────────────────────────────────────────────────────
   const updateRole = async (userId, role) => {
@@ -157,6 +174,41 @@ export default function SystemSettings() {
       toast.success('Database restored successfully');
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Restore failed');
+    }
+  };
+
+  // ── Batch CSV import ─────────────────────────────────────────────────────
+  const handleBatchImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBatchImporting(true);
+    setBatchImportResult(null);
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await api.post('/batches/import-csv', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setBatchImportResult(res.data);
+      toast.success(`Assigned ${res.data.students_assigned} students to batches`);
+      fetchBatches();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Batch import failed');
+    } finally {
+      setBatchImporting(false);
+      if (batchFileRef.current) batchFileRef.current.value = '';
+    }
+  };
+
+  const downloadBatchTemplate = async () => {
+    try {
+      const res = await api.get('/batches/import-template', { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'batch_assignment_template.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Could not download template');
     }
   };
 
@@ -203,6 +255,7 @@ export default function SystemSettings() {
     { id: 'backup', label: 'Backup & Restore', icon: HardDrive },
     { id: 'audit', label: 'Audit Log', icon: FileText },
     { id: 'sis', label: 'SIS Import', icon: Upload },
+    { id: 'batches', label: 'Counselor Batches', icon: Users },
     { id: 'notifications', label: 'Notifications', icon: Bell },
   ];
 
@@ -559,6 +612,129 @@ export default function SystemSettings() {
               </CardContent>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* ── Counselor Batches ─────────────────────────────────────────────── */}
+      {tab === 'batches' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="border-slate-100 shadow-sm rounded-[28px]">
+              <CardHeader title="Batch Assignment Import" subtitle="Upload a CSV to assign students to counselor intake batches (~40 each)." />
+              <CardContent className="p-6 space-y-4">
+                <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 space-y-2 text-sm text-purple-700">
+                  <p className="font-bold">Required CSV columns:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {['intake_year', 'batch_code', 'counselor_email', 'student_id'].map(c => (
+                      <code key={c} className="bg-white px-2 py-0.5 rounded text-xs font-mono border border-purple-200">{c}</code>
+                    ))}
+                  </div>
+                  <p className="font-bold mt-2">Optional (for new students):</p>
+                  <div className="flex flex-wrap gap-2">
+                    {['roll_no', 'name', 'email', 'department'].map(c => (
+                      <code key={c} className="bg-white px-2 py-0.5 rounded text-xs font-mono border border-purple-100 text-purple-500">{c}</code>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="w-full cursor-pointer block">
+                  <div className={`w-full py-8 rounded-2xl border-2 border-dashed transition-all text-center ${batchImporting ? 'border-purple-300 bg-purple-50 animate-pulse' : 'border-slate-200 hover:border-purple-400 hover:bg-slate-50'}`}>
+                    <Upload className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm text-slate-500 font-medium">
+                      {batchImporting ? 'Importing…' : 'Click to upload batch assignment CSV'}
+                    </p>
+                  </div>
+                  <input ref={batchFileRef} type="file" accept=".csv" className="hidden"
+                    onChange={handleBatchImport} disabled={batchImporting} />
+                </label>
+
+                <button
+                  onClick={downloadBatchTemplate}
+                  className="text-xs font-bold text-purple-600 hover:text-purple-800 flex items-center gap-1"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download template CSV
+                </button>
+              </CardContent>
+            </Card>
+
+            {batchImportResult && (
+              <Card className="border-slate-100 shadow-sm rounded-[28px]">
+                <CardHeader title="Import Results" />
+                <CardContent className="p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
+                      <p className="text-2xl font-bold text-emerald-700">{batchImportResult.students_assigned}</p>
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase">Assigned</p>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-center">
+                      <Users className="w-6 h-6 text-blue-500 mx-auto mb-1" />
+                      <p className="text-2xl font-bold text-blue-700">{batchImportResult.batches_created}</p>
+                      <p className="text-[10px] font-bold text-blue-600 uppercase">Batches Created</p>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 text-xs text-slate-500 space-y-1">
+                    <p>Students created: <strong>{batchImportResult.students_created}</strong></p>
+                    <p>Skipped: <strong>{batchImportResult.skipped}</strong></p>
+                    {batchImportResult.warnings?.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-[10px] font-bold text-amber-500 uppercase">Warnings</p>
+                        {batchImportResult.warnings.slice(0, 3).map((w, i) => (
+                          <p key={i} className="text-amber-600">{w}</p>
+                        ))}
+                      </div>
+                    )}
+                    {batchImportResult.errors?.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-[10px] font-bold text-rose-500 uppercase">Errors ({batchImportResult.errors.length})</p>
+                        {batchImportResult.errors.slice(0, 5).map((e, i) => (
+                          <p key={i} className="text-rose-500 font-mono">{e}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          <Card className="border-slate-100 shadow-sm rounded-[28px] overflow-hidden">
+            <CardHeader title="All Counselor Batches" subtitle="Intake groups and assigned counselors." />
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/80">
+                      {['Intake', 'Code', 'Batch Name', 'Counselor', 'Students', 'Target'].map(h => (
+                        <th key={h} className="text-left px-5 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batchesLoading ? (
+                      <tr><td colSpan={6} className="px-5 py-10 text-center text-slate-400">Loading…</td></tr>
+                    ) : batches.length === 0 ? (
+                      <tr><td colSpan={6} className="px-5 py-10 text-center text-slate-400">No batches yet. Upload a CSV to create them.</td></tr>
+                    ) : (
+                      batches.map(b => (
+                        <tr key={b.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                          <td className="px-5 py-3 font-semibold">{b.intake_year}</td>
+                          <td className="px-5 py-3 font-mono text-xs">{b.batch_code}</td>
+                          <td className="px-5 py-3 text-slate-700">{b.name}</td>
+                          <td className="px-5 py-3">
+                            <span className="font-medium text-slate-800">{b.counselor_name}</span>
+                            <span className="block text-xs text-slate-400">{b.counselor_email}</span>
+                          </td>
+                          <td className="px-5 py-3 font-bold">{b.student_count}</td>
+                          <td className="px-5 py-3 text-slate-400">~{b.target_size}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 

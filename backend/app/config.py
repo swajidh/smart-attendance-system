@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     MAIL_TLS: bool = True
     MAIL_SSL: bool = False
 
+    # Staff self-registration (admin / teacher / counselor portal)
+    STAFF_REGISTRATION_KEY: str = "AttendAI-Staff-2026"
+
     @property
     def allowed_origins_list(self) -> List[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]

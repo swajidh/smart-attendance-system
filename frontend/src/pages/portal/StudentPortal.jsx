@@ -38,6 +38,13 @@ function logout() {
   window.location.href = '/login';
 }
 
+function localDateKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 export default function StudentPortal() {
   const [profile, setProfile] = useState(null);
@@ -58,33 +65,51 @@ export default function StudentPortal() {
 
     if (profileRes.status === 'fulfilled') setProfile(profileRes.value.data);
     else if (profileRes.reason?.response?.status === 404) {
-      toast.error('No student record linked to your account. Contact an administrator.');
+      toast.error('No student record linked to your account. Ask an admin to add you with the same email.');
+    } else if (profileRes.status === 'rejected') {
+      toast.error('Could not load your profile.');
     }
     if (attRes.status === 'fulfilled') setAttendance(attRes.value.data);
+    else if (attRes.status === 'rejected' && attRes.reason?.response?.status !== 404) {
+      toast.error('Could not load attendance data.');
+    }
     if (attnRes.status === 'fulfilled') setAttention(attnRes.value.data);
+    else if (attnRes.status === 'rejected' && attnRes.reason?.response?.status !== 404) {
+      toast.error('Could not load attention data.');
+    }
     if (coursesRes.status === 'fulfilled') setCourses(coursesRes.value.data);
+    else if (coursesRes.status === 'rejected' && coursesRes.reason?.response?.status !== 404) {
+      toast.error('Could not load enrolled courses.');
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const storedUser = JSON.parse(localStorage.getItem('smart_attendance_user') || '{}');
-  const overallAtt = attendance?.overall?.overall_percentage ?? 0;
+  const overallAtt =
+    attendance?.overall?.overall_percentage
+    ?? attendance?.overall?.overall_attendance_pct
+    ?? 0;
   const overallAttn = attention?.overall_avg ?? 0;
   const enrolledCount = courses.length;
 
   // ── calendar ──────────────────────────────────────────────────────────────
   const calendarMap = {};
   (attendance?.calendar || []).forEach(r => {
-    calendarMap[r.date] = r.status;
+    const key = localDateKey(new Date(r.date));
+    const prev = calendarMap[key];
+    if (!prev || prev !== 'present') {
+      calendarMap[key] = r.status;
+    }
   });
 
-  // Build last 90 days grid
+  // Build last 90 days grid (local dates — matches how users read the calendar)
   const today = new Date();
   const calDays = Array.from({ length: 90 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() - (89 - i));
-    const key = d.toISOString().slice(0, 10);
+    const key = localDateKey(d);
     return { date: key, label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), status: calendarMap[key] };
   });
 
@@ -167,6 +192,19 @@ export default function StudentPortal() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8 pb-16">
+
+        {!profile && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-amber-800 text-sm">Account not linked to a student record</p>
+              <p className="text-amber-700 text-xs mt-1">
+                An administrator must register you as a student using the same email as this login
+                ({storedUser?.email || 'your account email'}). Then sign out and sign in again.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ── Overview ──────────────────────────────────────────────────────── */}
         {tab === 'overview' && (
@@ -347,7 +385,9 @@ export default function StudentPortal() {
                           style={{ width: `${c.attendance_pct}%` }}
                         />
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{c.present_sessions}/{c.total_sessions} sessions</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {c.present_sessions ?? c.present ?? 0}/{c.total_sessions ?? c.total ?? 0} sessions
+                      </p>
                     </div>
                   ))}
                 </div>

@@ -12,6 +12,7 @@ from app.models.user import User, UserRole
 from app.schemas.auth import (
     LoginRequest,
     RegisterRequest,
+    StaffRegisterRequest,
     TokenResponse,
     ForgotPasswordRequest,
     ResetPasswordRequest,
@@ -41,6 +42,36 @@ except ImportError:
 
 # ── Register ──────────────────────────────────────────────────────────────────
 
+async def _create_user(
+    db: AsyncSession,
+    *,
+    email: str,
+    password: str,
+    name: str,
+    role: UserRole,
+) -> User:
+    existing = await auth_service.get_user_by_email(db, email)
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    user = User(
+        email=email,
+        password_hash=auth_service.hash_password(password),
+        name=name,
+        role=role,
+    )
+    db.add(user)
+    await db.flush()
+
+    if user.role == UserRole.student:
+        from app.services import student_service
+        await student_service.link_user_to_student(db, user)
+
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @_rate_limit("20/minute")
 async def register(
@@ -48,26 +79,43 @@ async def register(
     payload: RegisterRequest,
     db: AsyncSession = Depends(get_db_session),
 ):
-    """
-    Create a new user account.
-    - Students may self-register (role defaults to 'student').
-    - Only admins should create teacher/counselor accounts (enforced in UI; 
-      server-side RBAC for non-student roles added in Phase 10 hardening).
-    """
-    existing = await auth_service.get_user_by_email(db, payload.email)
-    if existing:
-        raise HTTPException(status_code=409, detail="Email already registered")
+    """Student self-registration only."""
+    if payload.role != UserRole.student:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Student registration only. Staff accounts use /auth/register/staff.",
+        )
 
-    user = User(
+    return await _create_user(
+        db,
         email=payload.email,
-        password_hash=auth_service.hash_password(payload.password),
+        password=payload.password,
+        name=payload.name,
+        role=UserRole.student,
+    )
+
+
+@router.post("/register/staff", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@_rate_limit("10/minute")
+async def register_staff(
+    request: Request,
+    payload: StaffRegisterRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Staff self-registration for admin, teacher, and counselor roles."""
+    if payload.staff_key != settings.STAFF_REGISTRATION_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid staff registration key",
+        )
+
+    return await _create_user(
+        db,
+        email=payload.email,
+        password=payload.password,
         name=payload.name,
         role=payload.role,
     )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
 
 
 # ── Login ─────────────────────────────────────────────────────────────────────
@@ -87,6 +135,10 @@ async def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if user.role == UserRole.student:
+        from app.services import student_service
+        await student_service.link_user_to_student(db, user)
 
     token = auth_service.create_access_token(
         data={"sub": str(user.id)},

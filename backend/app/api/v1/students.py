@@ -16,11 +16,18 @@ POST   /students/{id}/re-enroll     clear + re-enroll
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-from app.api.dependencies import get_db_session, get_current_user, require_admin, require_role
+from app.api.dependencies import (
+    get_db_session,
+    require_manage_students,
+    require_students_read,
+    require_admin,
+)
 from app.models.user import User, UserRole
+from app.models.student import Student
 from app.schemas.student import (
     StudentCreate,
     StudentUpdate,
@@ -36,8 +43,6 @@ from app.services import student_service
 from app.models.student import EmbeddingStatus
 
 router = APIRouter(prefix="/students", tags=["students"])
-
-_require_teacher_or_admin = require_role(UserRole.teacher, UserRole.admin)
 
 
 # ── Quality check (open — used by WebcamCapture during capture) ───────────────
@@ -62,7 +67,7 @@ async def validate_frame(body: QualityCheckRequest):
 async def bulk_import(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_manage_students),
 ):
     """Import students from a CSV file."""
     if not file.filename or not file.filename.endswith(".csv"):
@@ -80,9 +85,32 @@ async def list_students(
     limit: int = 100,
     search: str | None = None,
     department: str | None = None,
+    batch_id: UUID | None = Query(None),
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_students_read),
 ):
+    from app.services import batch_service
+
+    if current_user.role == UserRole.counselor:
+        scope = await batch_service.scope_for_user(db, current_user, batch_id)
+        if scope is not None and not scope:
+            return []
+        q = select(Student)
+        if scope is not None:
+            q = q.where(Student.id.in_(scope))
+        if search:
+            like = f"%{search}%"
+            q = q.where(
+                Student.name.ilike(like)
+                | Student.student_id.ilike(like)
+                | Student.roll_no.ilike(like)
+            )
+        if department:
+            q = q.where(Student.department.ilike(f"%{department}%"))
+        q = q.order_by(Student.created_at.desc()).offset(skip).limit(limit)
+        result = await db.execute(q)
+        return result.scalars().all()
+
     students = await student_service.get_students(
         db, skip=skip, limit=limit, search=search, department=department
     )
@@ -93,7 +121,7 @@ async def list_students(
 async def create_student(
     data: StudentCreate,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_manage_students),
 ):
     try:
         return await student_service.create_student(db, data)
@@ -105,7 +133,7 @@ async def create_student(
 async def get_student(
     student_id: UUID,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_students_read),
 ):
     student = await student_service.get_student(db, student_id)
     if not student:
@@ -118,7 +146,7 @@ async def update_student(
     student_id: UUID,
     data: StudentUpdate,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_manage_students),
 ):
     student = await student_service.get_student(db, student_id)
     if not student:
@@ -145,7 +173,7 @@ async def enroll_face(
     student_id: UUID,
     body: EnrollFaceRequest,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_manage_students),
 ):
     """Enroll facial embeddings for an existing student."""
     student = await student_service.get_student(db, student_id)
@@ -164,7 +192,7 @@ async def re_enroll(
     student_id: UUID,
     body: EnrollFaceRequest,
     db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(_require_teacher_or_admin),
+    current_user: User = Depends(require_manage_students),
 ):
     """Clear previous embeddings and re-enroll with new images."""
     student = await student_service.get_student(db, student_id)

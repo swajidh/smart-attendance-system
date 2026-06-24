@@ -11,14 +11,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db_session, get_current_user, require_role
-from app.models.user import User, UserRole
+from app.api.dependencies import get_db_session, get_current_user, require_alerts
+from app.models.user import User
 from app.services import alert_service
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 # All alert routes require at least teacher role
-_STAFF = [Depends(require_role(UserRole.teacher, UserRole.admin, UserRole.counselor))]
+_STAFF = [Depends(require_alerts)]
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -42,17 +42,36 @@ async def list_alerts(
     student_id: Optional[UUID] = Query(None),
     alert_type: Optional[str] = Query(None),
     resolved: Optional[bool] = Query(None),
+    batch_id: Optional[UUID] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
-    return await alert_service.get_alerts(db, student_id, alert_type, resolved, limit)
+    from app.services import batch_service
+    scope = await batch_service.scope_for_user(db, current_user, batch_id)
+    return await alert_service.get_alerts(
+        db, student_id, alert_type, resolved, limit, student_ids=scope
+    )
 
 
 @router.put("/{alert_id}/resolve", dependencies=_STAFF)
 async def resolve_alert(
     alert_id: UUID,
     db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
+    from app.services import batch_service
+    from app.models.alert import Alert
+    from sqlalchemy import select
+
+    if current_user.role.value == "counselor":
+        scope = await batch_service.scope_for_user(db, current_user)
+        alert_q = await db.execute(select(Alert).where(Alert.id == alert_id))
+        alert_row = alert_q.scalar_one_or_none()
+        if alert_row and alert_row.student_id and scope is not None:
+            if alert_row.student_id not in scope:
+                raise HTTPException(status_code=403, detail="Alert not in your batch")
+
     result = await alert_service.resolve_alert(db, alert_id)
     if not result:
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -64,9 +83,13 @@ async def resolve_alert(
 @router.get("/risk-list", dependencies=_STAFF)
 async def risk_list(
     weeks: int = Query(4, ge=1, le=52),
+    batch_id: Optional[UUID] = Query(None),
     db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
-    return await alert_service.generate_risk_list(db, weeks)
+    from app.services import batch_service
+    scope = await batch_service.scope_for_user(db, current_user, batch_id)
+    return await alert_service.generate_risk_list(db, weeks, student_ids=scope)
 
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
