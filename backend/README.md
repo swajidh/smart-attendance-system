@@ -1,51 +1,68 @@
-Backend
-=======
+# Backend
 
-This directory will contain the FastAPI backend for the smart attendance system, implemented in Python 3.12 and structured according to the non-negotiable requirements.
+FastAPI backend for the Smart Attendance System.
 
-Expected structure (no implementation code yet):
+> **Last updated:** 2026-06-18
 
-- `app/`
-  - `api/` – Route handlers only (no business logic)
-    - `v1/` – Versioned API routers (e.g. `auth.py`, `attendance.py`, `router.py`)
-    - `dependencies.py` – Shared FastAPI dependencies (auth, DB, pagination)
-  - `services/` – Business logic services called by the API layer
-  - `integrations/` – Third-party and ML service clients
-  - `models/` – SQLAlchemy ORM models
-  - `schemas/` – Pydantic request/response models and envelopes
-  - `utils/` – Stateless utility functions
-  - `middleware/` – ASGI middleware (request ID, logging, etc.)
-  - `config.py` – `pydantic-settings` configuration
-  - `main.py` – FastAPI app factory
+## Current State
+
+The backend is a **minimal skeleton**. Only three endpoints are implemented; all other planned modules exist as empty stub files.
+
+### Implemented files
+
+| File | Purpose |
+|------|---------|
+| `app/main.py` | FastAPI app, CORS middleware, router registration |
+| `app/api/v1/attendance.py` | Face enrollment + WebSocket detection routes |
+| `app/services/ml_service.py` | MediaPipe face detection, blur validation, mock embeddings |
+
+### Working endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Welcome / health message |
+| `POST` | `/api/v1/attendance/enroll` | Enroll student face (min 10 images; mock 128-d embeddings) |
+| `WS` | `/api/v1/attendance/ws/detect` | Real-time frame processing (MediaPipe detect; random matching) |
+
+### Empty stubs (planned, not implemented)
+
+```
+app/config.py
+app/api/dependencies.py
+app/api/v1/auth.py, router.py, tasks.py
+app/models/__init__.py
+app/schemas/__init__.py
+app/middleware/
+app/integrations/
+app/utils/
+tests/conftest.py
+docs/schema.md, public-routes.md
+Dockerfile, pyproject.toml, poetry.lock
+```
+
+## Expected structure (target)
+
+- `app/api/` – Route handlers only (no business logic)
+  - `v1/` – Versioned API routers (`auth.py`, `students.py`, `sessions.py`, etc.)
+  - `dependencies.py` – Shared FastAPI dependencies (auth, DB, pagination)
+- `app/services/` – Business logic services
+- `app/integrations/` – Third-party and ML service clients
+- `app/models/` – Prisma/SQLAlchemy ORM models
+- `app/schemas/` – Pydantic request/response models
+- `app/utils/` – Stateless utility functions
+- `app/middleware/` – ASGI middleware
+- `app/config.py` – `pydantic-settings` configuration
 - `migrations/` – Alembic migration files
-  - `versions/` – Versioned migration scripts
-- `tests/`
-  - `api/` – Endpoint integration tests
-  - `services/` – Unit tests for the service layer
-  - `conftest.py` – Shared test fixtures
-- `docs/`
-  - `schema.md` – ER diagrams and table documentation
-  - `public-routes.md` – Explicit list of public endpoints (if any)
+- `tests/` – API and service unit tests
 
-Backend
-=======
+## Running locally
 
-This directory will contain the backend API and business logic for the smart attendance system.
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
-Suggested substructure:
+API docs: `http://localhost:8000/docs`
 
-- `src/`
-  - `api/`
-    - `routes/` – Route definitions (auth, attendance, analytics, monitoring, etc.)
-    - `controllers/` – Request handlers and response mappers
-    - `middlewares/` – Authentication, validation, logging, error handling
-    - `validators/` – Request validation schemas
-  - `services/` – Core business logic services
-  - `repositories/` (or `models/`) – Database access layer
-  - `db/` – Migrations, seeders, and schema definitions
-  - `integrations/` – CCTV camera and ML service integrations
-  - `config/` – Environment-aware configuration, constants, and logging
-  - `utils/` – Shared helpers
-  - `types/` – Shared type definitions
-  - `app.*` / `server.*` – Application bootstrap and HTTP server entrypoints
-
+See [`docs/api_design.md`](../docs/api_design.md) for the full endpoint specification and gap analysis.

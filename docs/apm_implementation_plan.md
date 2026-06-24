@@ -1,5 +1,19 @@
 # Implementation Plan: Attendance Processing Module (APM)
 
+> **Last updated:** 2026-06-18
+
+## Current Implementation Status
+
+| Layer | Component | Status |
+|-------|-----------|--------|
+| **Frontend** | `LiveClassroom.jsx` | 🟡 Webcam feed, canvas bounding-box overlay, roster panel, manual override toggle, session finalize |
+| **Frontend** | WebSocket client | 🟡 Connects to `WS /api/v1/sessions/{id}/detect`; offline fallback when backend unavailable |
+| **Frontend** | Session API calls | 🟡 `POST /sessions`, `PUT /sessions/{id}/close`, `PUT /attendance/{record_id}` attempted; falls back to `localStorage` |
+| **Backend** | `WS /api/v1/attendance/ws/detect` | 🟡 MediaPipe face detection works; student matching is random |
+| **Backend** | Session/attendance REST routes | ❌ Not implemented |
+| **Backend** | Database persistence | ❌ Not implemented |
+| **ML** | Real embedding comparison | ❌ Not implemented (`ml/` directory empty) |
+
 ## Overview
 This document outlines the detailed flow and implementation plan for the Attendance Processing Module (APM-01 to APM-07). It involves real-time face detection, recognition using embeddings, attendance marking, and manual overrides.
 
@@ -12,12 +26,13 @@ The implementation will be divided into three core layers:
 
 ## Phase 1: Real-Time Face Detection (APM-01 & APM-07)
 - **Frontend**: 
-  - Integrate `react-webcam` to capture video frames.
-  - Process video frames and send them to the backend via WebSockets (or fast HTTP polling) for low-latency processing.
-  - Receive bounding box coordinates from the backend and draw them on an HTML5 canvas overlay.
+  - ✅ `react-webcam` integrated in `LiveClassroom.jsx`
+  - ✅ Frames sent to backend via WebSocket when connected (`captureAndSendFrame` at ~5 FPS)
+  - ✅ Bounding box coordinates drawn on HTML5 canvas overlay
+  - 🟡 Offline fallback: camera runs without detection when WebSocket unavailable
 - **ML Module**:
-  - Implement a lightweight face detector (e.g., MediaPipe Face Detection or a pruned MTCNN/RetinaFace model) optimized for CPU.
-  - Process frames in under 2 seconds (optimally <100ms per frame).
+  - 🟡 MediaPipe Face Detection implemented in `backend/app/services/ml_service.py`
+  - ❌ No model optimization (APM-07 not started)
 
 ## Phase 2: Face Recognition & Embeddings (APM-02 & APM-03)
 - **ML Module**:
@@ -41,15 +56,14 @@ The implementation will be divided into three core layers:
 
 ## Phase 4: Manual Override (APM-06)
 - **Frontend Dashboard**:
-  - Build an Attendance Table view listing all students for a session.
-  - Add an edit toggle allowing teachers/admins to change status (`Present` <-> `Absent`).
+  - ✅ Attendance roster table with Present/Absent toggle in `LiveClassroom.jsx`
+  - ✅ Manual override attempts `PUT /attendance/{record_id}`; updates local state regardless
 - **Backend API**:
-  - Implement a PUT/PATCH endpoint to manually update attendance records.
-  - Add logging to track who modified the record and when (audit trail).
-  - Enforce role-based access control (only Teachers/Admins).
+  - ❌ PUT endpoint not implemented
+  - ❌ Audit trail and RBAC not implemented
 
 ## Next Steps
-1. Initialize the ML pipeline with lightweight models.
-2. Set up WebSocket/API endpoints in the FastAPI backend for frame processing.
-3. Build the frontend real-time tracking interface (Camera + Canvas).
-4. Implement the database schema for Attendance Sessions and Logs.
+1. Implement session REST API (`POST /sessions`, `PUT /sessions/{id}/close`) and align WebSocket path with frontend
+2. Replace random matching in `ml_service.py` with real embedding comparison
+3. Initialize the `ml/` module with FaceEncoder and FaceMatcher
+4. Implement the database schema for Attendance Sessions and Logs

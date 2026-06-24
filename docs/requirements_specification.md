@@ -1,57 +1,57 @@
 # Requirements Specification — Smart Attendance System
 
-> **Last Updated:** 2026-06-04  
+> **Last Updated:** 2026-06-18  
 > **Total User Stories:** 55  
-> **Completed:** 3 | **Partial:** 14 | **Pending:** 38
+> **Completed:** 3 | **Partial:** 17 | **Pending:** 35
 
 ---
 
 ## Module 1: Authentication & User Management (UAM)
 
-**Module Status:** ❌ Not Started  
+**Module Status:** 🟡 Partially Completed (~15%) — frontend shell only, no backend auth  
 **Story Points Total:** 20
 
 | ID | User Story | Priority | Story Points | Status |
 |----|-----------|----------|-------------|--------|
 | UAM-01 | As a teacher/admin, I want to log into the system so that I can access attendance features securely. | High | 3 | ❌ Pending |
-| UAM-02 | As a logged-in user, I want to log out so that my account remains secure. | Medium | 2 | ❌ Pending |
-| UAM-03 | As an instructor, I want to maintain a bio about myself so that it is used on the course listing. | Medium | 2 | ❌ Pending |
+| UAM-02 | As a logged-in user, I want to log out so that my account remains secure. | Medium | 2 | 🟡 Partial (sidebar logout clears `localStorage`; no backend session) |
+| UAM-03 | As an instructor, I want to maintain a bio about myself so that it is used on the course listing. | Medium | 2 | 🟡 Partial (`ProfilePage.jsx` UI; no backend) |
 | UAM-04 | As a user, I want to reset my password if I forget it so that I can regain access to my account. | High | 3 | ❌ Pending |
-| UAM-05 | As an admin, I want to manage user roles so that counselors and faculty only see relevant student data. | High | 5 | ❌ Pending |
+| UAM-05 | As an admin, I want to manage user roles so that counselors and faculty only see relevant student data. | High | 5 | 🟡 Partial (sidebar role-based nav filtering with mock user only) |
 | UAM-06 | As a student, I want to sign up and login so that I can see my registered attendance and attention progress. | Medium | 3 | ❌ Pending |
-| UAM-07 | As a user, I want to update my profile picture so that the system has a current reference for identity verification. | Low | 2 | ❌ Pending |
+| UAM-07 | As a user, I want to update my profile picture so that the system has a current reference for identity verification. | Low | 2 | 🟡 Partial (`ProfilePage.jsx` avatar upload UI; no backend) |
 
 ---
 
 ## Module 2: Student Registration — Face Enrollment (FEM)
 
-**Module Status:** 🟡 Partially Completed (~55%)  
+**Module Status:** 🟡 Partially Completed (~60%) — frontend complete with offline fallback; backend enrollment endpoint only  
 **Story Points Total:** 31
 
 | ID | User Story | Priority | Story Points | Status |
 |----|-----------|----------|-------------|--------|
 | FEM-01 | As an admin, I want to register a student's basic information so that they are added to the system database. | High | 3 | ✅ Done |
-| FEM-02 | As an admin, I want to capture multiple face samples via a live webcam during registration for accurate recognition. | High | 5 | 🟡 Partial |
-| FEM-03 | As a system, I want to convert captured faces into 128-d or 512-d embeddings so that recognition is computationally efficient. | High | 8 | 🟡 Partial |
-| FEM-04 | As an admin, I want to upload existing student photos in bulk so that I can enroll an entire class at once. | Medium | 5 | 🟡 Partial |
+| FEM-02 | As an admin, I want to capture multiple face samples via a live webcam during registration for accurate recognition. | High | 5 | 🟡 Partial (15-sample guided capture with angle prompts in `WebcamCapture.jsx`) |
+| FEM-03 | As a system, I want to convert captured faces into 128-d or 512-d embeddings so that recognition is computationally efficient. | High | 8 | 🟡 Partial (backend mock embeddings via `np.random.rand(128)`; no real model) |
+| FEM-04 | As an admin, I want to upload existing student photos in bulk so that I can enroll an entire class at once. | Medium | 5 | 🟡 Partial (bulk upload UI with simulated processing; no backend) |
 | FEM-05 | As an admin, I want to view a gallery of enrolled students to verify that the enrollment was successful. | Medium | 3 | ✅ Done |
-| FEM-06 | As a system, I want to validate the quality of captured faces (lighting/blur) so that the attendance engine remains reliable. | Medium | 5 | 🟡 Partial |
-| FEM-07 | As an admin, I want to update or re-enroll a student's face data if their appearance changes or recognition fails. | Low | 2 | ❌ Pending |
+| FEM-06 | As a system, I want to validate the quality of captured faces (lighting/blur) so that the attendance engine remains reliable. | Medium | 5 | 🟡 Partial (Laplacian blur check in backend; simulated UI warnings in frontend) |
+| FEM-07 | As an admin, I want to update or re-enroll a student's face data if their appearance changes or recognition fails. | Low | 2 | 🟡 Partial (re-enroll button + `?student=` query param flow; no audit history backend) |
 
 ---
 
 ## Module 3: Attendance Processing Module (APM)
 
-**Module Status:** 🟡 Partially Completed (~40%)  
+**Module Status:** 🟡 Partially Completed (~45%) — frontend live classroom built; backend WebSocket with mock matching only  
 **Story Points Total:** 42
 
 | ID | User Story | Priority | Story Points | Status |
 |----|-----------|----------|-------------|--------|
-| APM-01 | As a teacher, I want the system to detect faces in real-time so that manual attendance taking is eliminated. | High | 5 | 🟡 Partial |
-| APM-02 | As a system, I want to match detected faces with stored embeddings so that individual students can be identified. | High | 8 | ❌ Pending |
-| APM-03 | As a system, I want to label unrecognized faces as "Unknown" so that the teacher can be notified of unauthorized persons. | Medium | 3 | 🟡 Partial |
-| APM-04 | As a teacher, I want the system to mark recognized students as "Present" so that records are updated automatically. | High | 5 | 🟡 Partial |
-| APM-05 | As a system, I want to mark undetected students as "Absent" once the attendance session is closed. | High | 5 | 🟡 Partial |
+| APM-01 | As a teacher, I want the system to detect faces in real-time so that manual attendance taking is eliminated. | High | 5 | 🟡 Partial (webcam + canvas overlay; WebSocket wired in frontend; offline fallback when backend unavailable) |
+| APM-02 | As a system, I want to match detected faces with stored embeddings so that individual students can be identified. | High | 8 | ❌ Pending (backend uses random matching only) |
+| APM-03 | As a system, I want to label unrecognized faces as "Unknown" so that the teacher can be notified of unauthorized persons. | Medium | 3 | 🟡 Partial (UI renders Unknown labels; backend assigns randomly) |
+| APM-04 | As a teacher, I want the system to mark recognized students as "Present" so that records are updated automatically. | High | 5 | 🟡 Partial (roster updated from WebSocket response or `localStorage`) |
+| APM-05 | As a system, I want to mark undetected students as "Absent" once the attendance session is closed. | High | 5 | 🟡 Partial (session finalize saves roster to `localStorage`; no backend session API) |
 | APM-06 | As a teacher, I want to manually override or edit an attendance status so that I can correct any system errors. | Medium | 3 | ✅ Done |
 | APM-07 | As an admin, I want the recognition process to be optimized to use the lightweight model so the system doesn't lag. | High | 13 | ❌ Pending |
 
@@ -142,12 +142,12 @@
 
 ## Module 9: Announcements / System Management (SAM)
 
-**Module Status:** ❌ Not Started  
+**Module Status:** 🟡 Partially Completed (~15%) — course CRUD UI only  
 **Story Points Total:** 32
 
 | ID | User Story | Priority | Story Points | Status |
 |----|-----------|----------|-------------|--------|
-| SAM-01 | As an admin, I want to manage courses and subjects so that attendance sessions are organized properly. | High | 5 | 🟡 Partial (frontend only, no backend) |
+| SAM-01 | As an admin, I want to manage courses and subjects so that attendance sessions are organized properly. | High | 5 | 🟡 Partial (`CourseDashboard.jsx` CRUD via `localStorage`; no backend) |
 | SAM-02 | As an admin, I want to backup attendance and attention data so that no critical data is lost. | Low | 3 | ❌ Pending |
 | SAM-03 | As a system, I want to manage the CI/CD pipeline so that optimized model updates deploy automatically. | High | 8 | ❌ Pending |
 | SAM-04 | As an IT support member, I want to monitor system health and resource usage. | Medium | 3 | ❌ Pending |
