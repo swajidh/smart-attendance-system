@@ -1,22 +1,51 @@
 # Documentation
 
-Design artifacts and project planning for the Smart Attendance System.
+Design artifacts and reference documentation for the Smart Attendance System (AttendAI).
 
-## Available Documents
+> **Last updated:** 2026-06-18
+
+---
+
+## Core documents
 
 | File | Description |
 |------|-------------|
-| [`requirements_specification.md`](requirements_specification.md) | 55 user stories across 9 modules with implementation status |
-| [`development_todo.md`](development_todo.md) | Phased development roadmap and task checklist |
-| [`project_audit_report.md`](project_audit_report.md) | Module-by-module audit of current vs planned state |
-| [`api_design.md`](api_design.md) | Implemented backend endpoints and endpoints still to build |
-| [`apm_implementation_plan.md`](apm_implementation_plan.md) | Attendance Processing Module architecture and plan |
+| [`project_overview.md`](project_overview.md) | Architecture, tech stack, repository layout |
+| [`requirements_specification.md`](requirements_specification.md) | 55 user stories across 9 modules (all implemented) |
+| [`api_design.md`](api_design.md) | Implemented REST and WebSocket endpoints |
+| [`roles.md`](roles.md) | RBAC matrix, registration flows, counselor batches |
+| [`deployment_guide.md`](deployment_guide.md) | Local and production deployment |
+| [`testing_strategy.md`](testing_strategy.md) | Backend, frontend, ML, and CI testing |
+| [`project_audit_report.md`](project_audit_report.md) | Module-by-module implementation audit |
+| [`development_todo.md`](development_todo.md) | Phase roadmap (all phases complete) |
+| [`apm_implementation_plan.md`](apm_implementation_plan.md) | Attendance processing module design & status |
 
-## Planned (not yet written)
+---
 
-- `project_overview.md` – High-level project summary
-- `system_architecture.md` – Component interaction diagrams
-- `ml_design.md` – CNN architectures, training, and evaluation
-- `ui_ux_design.md` – Wireframes and user flows
-- `deployment_guide.md` – Environment setup and deployment
-- `testing_strategy.md` – Testing approach across frontend, backend, and ML
+## Related READMEs
+
+| Path | Description |
+|------|-------------|
+| [`../README.md`](../README.md) | Project root — quick start and feature summary |
+| [`../backend/README.md`](../backend/README.md) | Backend setup and modules |
+| [`../frontend/README.md`](../frontend/README.md) | Frontend routes and structure |
+| [`../infra/README.md`](../infra/README.md) | Docker and production infrastructure |
+| [`../scripts/README.md`](../scripts/README.md) | Operational scripts |
+
+---
+
+## Live API documentation
+
+When the backend is running:
+
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+---
+
+## Local-only files (not in git)
+
+The following are excluded via `.gitignore` and kept for local development only:
+
+- `planning/` — phase planning notes
+- `agent.md` — agent session state snapshot

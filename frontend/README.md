@@ -1,6 +1,6 @@
 # Frontend
 
-React dashboard and landing page for the Smart Attendance System.
+React dashboard, auth pages, and student portal for the Smart Attendance System.
 
 > **Last updated:** 2026-06-18
 
@@ -15,8 +15,9 @@ React dashboard and landing page for the Smart Attendance System.
 | Axios | API client |
 | react-webcam | Camera capture |
 | react-hot-toast | Notifications |
-| recharts | Charts (reports page) |
+| recharts | Charts |
 | lucide-react | Icons |
+| Vitest | Unit tests |
 
 ## Running locally
 
@@ -26,66 +27,108 @@ npm install
 npm run dev
 ```
 
-Default dev server: `http://localhost:5173`
-
-Set the API base URL via `.env`:
+Create `frontend/.env`:
 
 ```env
 VITE_API_URL=http://localhost:8000/api/v1
 ```
 
+Default dev server: http://localhost:5173
+
+## Scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Vite dev server |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npm run test` | Vitest (watch) |
+| `npm run test -- --run` | Vitest single pass (CI) |
+
 ## Routes
 
-| Path | Page | Status |
+### Public
+
+| Path | Page |
+|------|------|
+| `/` | Landing page |
+| `/login` | Login |
+| `/signup` | Student signup |
+| `/staff/signup` | Staff signup (requires registration key) |
+| `/forgot-password` | Password reset request |
+| `/reset-password` | Password reset form |
+
+### Staff dashboard (`/dashboard`)
+
+Protected by JWT + permission checks via `ProtectedRoute`.
+
+| Path | Page | Permission |
+|------|------|------------|
+| `/dashboard` | Dashboard home | `dashboard_view` |
+| `/dashboard/profile` | Profile | `dashboard_view` |
+| `/dashboard/live` | Live classroom | `live_sessions` |
+| `/dashboard/students` | Student management | `manage_students` |
+| `/dashboard/enrollment` | Face enrollment | `manage_students` |
+| `/dashboard/courses` | Course management | `manage_courses` |
+| `/dashboard/my-batch` | Counselor batch roster | `batches_read` |
+| `/dashboard/alerts` | Alerts & intervention | `alerts` |
+| `/dashboard/attention` | Attention analysis | `attention_read` |
+| `/dashboard/reports` | Reports & logs | `reports_read` |
+| `/dashboard/settings` | System settings | `system_admin` |
+
+### Student portal
+
+| Path | Page | Access |
 |------|------|--------|
-| `/` | Landing page | ✅ Complete |
-| `/dashboard` | Dashboard home | 🟡 Stats from `localStorage` |
-| `/dashboard/students` | Student management | 🟡 API + `localStorage` fallback |
-| `/dashboard/enrollment` | Face enrollment | 🟡 API + `localStorage` fallback |
-| `/dashboard/courses` | Course management | 🟡 `localStorage` only |
-| `/dashboard/live` | Live classroom | 🟡 WebSocket/API + offline fallback |
-| `/dashboard/reports` | Reports & logs | 🟡 `localStorage`; mock export |
-| `/dashboard/profile` | User profile | 🟡 API + mock user fallback |
-| `/dashboard/attention` | Attention analysis | ❌ Placeholder |
-| `/dashboard/settings` | System settings | ❌ Placeholder |
-| `/login`, `/signup`, `/forgot-password` | Auth | ❌ Not implemented (routes commented out) |
+| `/portal` | Student portal | Role: `student` |
 
 ## Project structure
 
 ```
 src/
 ├── components/
-│   ├── dashboard/   # Sidebar, Topbar, WebcamCapture, StudentRegistrationForm
-│   ├── landing/     # Landing page sections (used by pages/landing/LandingPage)
-│   ├── layout/      # ProtectedRoute, DashboardLayout
-│   └── ui/          # Button, Card, Input, Badge, Tabs, etc.
+│   ├── analytics/     # AttentionBadge
+│   ├── dashboard/     # Sidebar, Topbar, WebcamCapture, layouts
+│   ├── landing/       # Landing page sections
+│   ├── layout/        # ProtectedRoute, DashboardLayout
+│   └── ui/            # Button, Card, Input, Badge, Tabs
+├── config/
+│   └── roles.js       # Permission matrix (mirrors backend)
 ├── pages/
-│   ├── landing/     # LandingPage (+ unused duplicate section files)
-│   └── dashboard/   # All dashboard pages
+│   ├── auth/          # Login, signup, password reset
+│   ├── dashboard/     # All staff dashboard pages
+│   ├── landing/       # LandingPage
+│   └── portal/        # StudentPortal
 ├── services/
-│   └── api.js       # Axios client with JWT interceptor
-├── hooks/
-│   └── useScrollReveal.js
-├── App.jsx          # Route definitions
-└── main.jsx         # Entry point
+│   └── api.js         # Axios client with JWT interceptor
+├── test/              # Vitest suites
+├── App.jsx            # Route definitions
+└── main.jsx           # Entry point
 ```
 
-## API integration pattern
+## Auth
 
-Dashboard pages call the backend via `src/services/api.js`. On failure, they fall back to `localStorage` so the UI remains usable without a running backend.
+- JWT stored in `localStorage` key `smart_attendance_token`
+- User profile cached in `smart_attendance_user`
+- `ProtectedRoute` validates token via `GET /auth/me` and enforces permissions
+- Role-based redirect: students → `/portal`, staff → `/dashboard`
 
-**`localStorage` keys used:**
+See [`docs/roles.md`](../docs/roles.md) for the full permission matrix.
 
-| Key | Used by |
-|-----|---------|
-| `smart_attendance_enrolled_students` | StudentManagement, FaceEnrollment, LiveClassroom |
-| `smart_attendance_courses` | CourseDashboard, DashboardHome, StudentManagement |
-| `smart_attendance_session_logs` | LiveClassroom, ReportsLogs, DashboardHome |
-| `smart_attendance_user` | ProtectedRoute, Sidebar, ProfilePage |
-| `smart_attendance_token` | api.js interceptor |
+## API integration
 
-## Auth (current behaviour)
+All dashboard pages use `src/services/api.js` against the FastAPI backend. Business data is persisted in PostgreSQL — there is no `localStorage` fallback for students, courses, or sessions.
 
-`ProtectedRoute` does **not** enforce authentication. It injects a mock admin user into `localStorage` and allows all dashboard routes. Logout in the sidebar navigates to `/login`, which is not yet implemented.
+## Tests
 
-See the root [`README.md`](../README.md) for the backend API contract the frontend expects.
+```bash
+npm run test -- --run
+```
+
+| File | Covers |
+|------|--------|
+| `src/test/api.test.js` | Axios config and interceptors |
+| `src/test/ProtectedRoute.test.jsx` | Auth guard and role redirects |
+| `src/test/loginValidation.test.js` | Form validation |
+
+See [`docs/testing_strategy.md`](../docs/testing_strategy.md).

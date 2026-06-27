@@ -2,8 +2,7 @@
 # For production, use infra/docker/docker-compose.yml.
 # Usage: docker compose up
 #
-# Requires a .env file in the project root (copy from backend/.env):
-#   cp backend/.env .env   # then adjust ALLOWED_ORIGINS etc.
+# Copy backend/.env.example to backend/.env and adjust values.
 
 services:
 
@@ -25,24 +24,41 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  migrate:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: sas-backend
-    restart: unless-stopped
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: sas-migrate
     depends_on:
       db:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-smart_attendance_db}
+    command: alembic upgrade head
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: sas-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-smart_attendance_db}
       SECRET_KEY: ${SECRET_KEY:-change-me-before-production}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
-      - uploads_data:/app/uploads
+      - ./backend:/workspace/backend
+      - ./ml:/workspace/ml
+      - uploads_data:/workspace/backend/uploads
 
   frontend:
     image: node:20-alpine

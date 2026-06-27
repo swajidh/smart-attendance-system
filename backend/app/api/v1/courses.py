@@ -30,18 +30,37 @@ from app.models.course_student import CourseStudent
 from app.models.student import Student
 from app.models.attendance import Attendance, AttendanceStatus
 from app.models.session import Session, SessionStatus
+from app.services import attention_aggregates as attn_agg
 from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse, CourseEnrollRequest
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
 
-@router.get("", response_model=list[CourseResponse])
+def _course_dict(course: Course, avg_attention: float = 0.0) -> dict:
+    return {
+        "id": str(course.id),
+        "code": course.code,
+        "name": course.name,
+        "description": course.description,
+        "slots": course.slots,
+        "instructor_id": str(course.instructor_id) if course.instructor_id else None,
+        "created_at": course.created_at.isoformat(),
+        "avg_attention": avg_attention,
+    }
+
+
+@router.get("")
 async def list_courses(
     db: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(require_courses_read),
 ):
     result = await db.execute(select(Course).order_by(Course.code))
-    return result.scalars().all()
+    courses = result.scalars().all()
+    out = []
+    for c in courses:
+        avg_attn = await attn_agg.get_course_avg_attention(db, c.id)
+        out.append(_course_dict(c, avg_attn))
+    return out
 
 
 @router.post("", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
@@ -149,6 +168,7 @@ async def get_course_detail(
         )
         present_count = present_q.scalar() or 0
         att_pct = round(present_count / total_sessions * 100, 1) if total_sessions else 0.0
+        avg_attn = await attn_agg.get_student_avg_attention(db, s.id)
         student_stats.append({
             "id": str(s.id),
             "name": s.name,
@@ -157,6 +177,7 @@ async def get_course_detail(
             "present": present_count,
             "absent": total_sessions - present_count,
             "attendance_pct": att_pct,
+            "avg_attention": avg_attn,
         })
 
     # Overall course attendance average
@@ -164,6 +185,7 @@ async def get_course_detail(
         round(sum(s["attendance_pct"] for s in student_stats) / len(student_stats), 1)
         if student_stats else 0.0
     )
+    course_avg_attention = await attn_agg.get_course_avg_attention(db, course_id)
 
     return {
         "id": str(course.id),
@@ -175,6 +197,7 @@ async def get_course_detail(
         "total_students": len(student_stats),
         "total_sessions": total_sessions,
         "avg_attendance": avg_pct,
+        "avg_attention": course_avg_attention,
         "students": student_stats,
         "created_at": course.created_at.isoformat(),
     }

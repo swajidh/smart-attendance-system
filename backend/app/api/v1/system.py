@@ -85,6 +85,27 @@ async def system_health(db: AsyncSession = Depends(get_db_session)):
         ml_status["head_pose"] = "not_loaded"
 
     try:
+        from ml import attention_scorer
+        ml_status["attention_scorer"] = "ready"
+        ml_status["attention_thresholds"] = {
+            "high": attention_scorer.HIGH_THRESHOLD,
+            "low": attention_scorer.LOW_THRESHOLD,
+        }
+    except Exception:
+        ml_status["attention_scorer"] = "not_loaded"
+
+    try:
+        from ml import posture_detector
+        ml_status["posture_detector"] = "ready"
+    except Exception:
+        ml_status["posture_detector"] = "not_loaded"
+
+    ml_status["attention_pipeline_ready"] = (
+        ml_status.get("head_pose") == "ready"
+        and ml_status.get("attention_scorer") == "ready"
+    )
+
+    try:
         from ml.face_encoder import ENCODER_READY, EMBEDDING_DIM
         if ENCODER_READY:
             ml_status["face_encoder"] = "ready"

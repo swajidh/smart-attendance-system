@@ -9,7 +9,7 @@ Scoring rules (yaw = horizontal, pitch = vertical):
   Head down / away (>45°)              → 0–20    (sleeping / very distracted)
   No pose data                         → last known score (or 50 neutral)
 
-Smoothing: exponential moving average (α = 0.3) over the last 30 samples.
+Smoothing: exponential moving average (α = 0.3) over samples within a 60s window.
 State is stored module-level so the WebSocket handler and API can both access it.
 """
 
@@ -20,14 +20,33 @@ from typing import Optional
 
 # ── Scoring parameters ────────────────────────────────────────────────────────
 
-_WINDOW = 30          # samples to keep per student
-_ALPHA = 0.3          # EMA smoothing factor
-_NEUTRAL_SCORE = 50.0 # score used when pose is unknown
+SMOOTH_WINDOW_SEC = 60.0   # time-based smoothing window (Phase 6 spec)
+_ALPHA = 0.3                 # EMA smoothing factor
+_NEUTRAL_SCORE = 50.0       # score used when pose is unknown
+HIGH_THRESHOLD = 70.0        # green band lower bound
+LOW_THRESHOLD = 40.0         # red band upper bound
+PERSIST_INTERVAL_SEC = 2.0   # min seconds between DB writes per student
 
 # ── Module-level state ────────────────────────────────────────────────────────
 # Key: (session_id: str, student_id: str)
-# Value: {"ema": float, "window": deque[float], "last_ts": float, "frame_count": int}
+# Value: {"ema": float, "samples": deque[(ts, score)], "last_ts": float,
+#         "frame_count": int, "last_persist_ts": float}
 _state: dict[tuple[str, str], dict] = {}
+
+
+def get_score_level(score: float) -> str:
+    """Return high | medium | low for a 0–100 score."""
+    if score >= HIGH_THRESHOLD:
+        return "high"
+    if score >= LOW_THRESHOLD:
+        return "medium"
+    return "low"
+
+
+def _prune_old_samples(st: dict, now: float) -> None:
+    cutoff = now - SMOOTH_WINDOW_SEC
+    while st["samples"] and st["samples"][0][0] < cutoff:
+        st["samples"].popleft()
 
 
 def _pose_to_raw_score(pose: Optional[dict]) -> float:
@@ -37,20 +56,15 @@ def _pose_to_raw_score(pose: Optional[dict]) -> float:
 
     yaw = abs(pose.get("yaw", 0.0))
     pitch = abs(pose.get("pitch", 0.0))
-    # Use the larger of yaw/pitch as the primary distraction indicator
     deviation = max(yaw, pitch)
 
     if deviation < 15:
-        # 0° → 100, 15° → 80
         score = 100.0 - (deviation / 15.0) * 20.0
     elif deviation < 30:
-        # 15° → 80, 30° → 50
         score = 80.0 - ((deviation - 15.0) / 15.0) * 30.0
     elif deviation < 45:
-        # 30° → 50, 45° → 20
         score = 50.0 - ((deviation - 30.0) / 15.0) * 30.0
     else:
-        # 45° → 20, 90° → 0
         score = max(0.0, 20.0 - ((deviation - 45.0) / 45.0) * 20.0)
 
     return round(score, 1)
@@ -61,25 +75,25 @@ def update(
     student_id: str,
     pose: Optional[dict],
 ) -> float:
-    """
-    Update the attention state for one (session, student) pair and return
-    the new smoothed score (0–100).
-    """
+    """Update attention state and return the smoothed score (0–100)."""
     key = (session_id, student_id)
     raw = _pose_to_raw_score(pose)
+    now = time.time()
 
     if key not in _state:
         _state[key] = {
             "ema": raw,
-            "window": deque([raw], maxlen=_WINDOW),
-            "last_ts": time.time(),
-            "frame_count": 0,
+            "samples": deque([(now, raw)]),
+            "last_ts": now,
+            "frame_count": 1,
+            "last_persist_ts": 0.0,
         }
     else:
         st = _state[key]
-        st["window"].append(raw)
+        st["samples"].append((now, raw))
+        _prune_old_samples(st, now)
         st["ema"] = _ALPHA * raw + (1 - _ALPHA) * st["ema"]
-        st["last_ts"] = time.time()
+        st["last_ts"] = now
         st["frame_count"] += 1
 
     return round(_state[key]["ema"], 1)
@@ -108,14 +122,17 @@ def get_class_average(session_id: str) -> float:
     return round(sum(scores) / len(scores), 1)
 
 
-def should_persist(session_id: str, student_id: str, every_n: int = 30) -> bool:
-    """Return True once every `every_n` frames — used to throttle DB writes."""
+def should_persist(session_id: str, student_id: str) -> bool:
+    """Return True if enough time elapsed since last DB write (~2s)."""
     key = (session_id, student_id)
     st = _state.get(key)
-    if st is None:
+    if st is None or st["frame_count"] <= 0:
         return False
-    fc = st["frame_count"]
-    return fc > 0 and fc % every_n == 0
+    now = time.time()
+    if now - st.get("last_persist_ts", 0.0) >= PERSIST_INTERVAL_SEC:
+        st["last_persist_ts"] = now
+        return True
+    return False
 
 
 def clear_session(session_id: str) -> None:

@@ -26,6 +26,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import AttentionBadge from '../../components/analytics/AttentionBadge';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardContent } from '../../components/ui/Card';
@@ -188,6 +189,7 @@ export default function ReportsLogs() {
   const stats = {
     totalSessions: summary?.total_sessions ?? 0,
     avgAttendance: summary?.avg_attendance_pct ?? 0,
+    avgAttention: summary?.avg_attention ?? 0,
     anomalies: sessions.filter((s) => s.attendance_pct < 50 || s.total_unknown > 5).length,
     activeCourses: [...new Set(sessions.map((s) => s.course_id))].length,
   };
@@ -303,10 +305,10 @@ export default function ReportsLogs() {
           isWarning={stats.anomalies > 0}
         />
         <StatCard
-          title="Active Courses"
-          value={stats.activeCourses}
-          icon={CheckCircle2}
-          trend="In selected range"
+          title="Avg. Attention"
+          value={stats.avgAttention || '—'}
+          icon={TrendingDown}
+          trend="Class engagement"
           color="indigo"
         />
       </div>
@@ -357,7 +359,8 @@ export default function ReportsLogs() {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                       <th className="px-6 py-4">Session Info</th>
-                      <th className="px-6 py-4">Engagement</th>
+                      <th className="px-6 py-4">Attendance</th>
+                      <th className="px-6 py-4">Attention</th>
                       <th className="px-6 py-4 text-center">Unknowns</th>
                       <th className="px-6 py-4">Status</th>
                       <th className="px-6 py-4 text-right">Action</th>
@@ -409,6 +412,13 @@ export default function ReportsLogs() {
                               </div>
                             </div>
                           </td>
+                          <td className="px-6 py-4">
+                            {session.avg_class_attention > 0 ? (
+                              <AttentionBadge score={session.avg_class_attention} />
+                            ) : (
+                              <span className="text-xs text-slate-300">—</span>
+                            )}
+                          </td>
                           <td className="px-6 py-4 text-center">
                             <Badge variant={session.total_unknown > 0 ? 'warning' : 'success'} className="text-[10px]">
                               {session.total_unknown} Unknown
@@ -450,7 +460,7 @@ export default function ReportsLogs() {
             <Card noPadding className="border-slate-100 shadow-sm overflow-hidden rounded-[32px]">
               <CardHeader
                 title="At-Risk Students"
-                subtitle="Students with attendance below 75%. Severity: warning 60–75%, critical <60%."
+                subtitle="Students with low attendance or low average attention."
               />
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -460,6 +470,8 @@ export default function ReportsLogs() {
                       <th className="px-6 py-4">Department</th>
                       <th className="px-6 py-4">Sessions</th>
                       <th className="px-6 py-4">Attendance</th>
+                      <th className="px-6 py-4">Attention</th>
+                      <th className="px-6 py-4">Reason</th>
                       <th className="px-6 py-4">Severity</th>
                     </tr>
                   </thead>
@@ -497,6 +509,12 @@ export default function ReportsLogs() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
+                          <AttentionBadge score={student.avg_attention} />
+                        </td>
+                        <td className="px-6 py-4 text-xs font-semibold text-slate-500 capitalize">
+                          {student.risk_reason || 'attendance'}
+                        </td>
+                        <td className="px-6 py-4">
                           <Badge variant={student.severity === 'critical' ? 'danger' : 'warning'}>
                             {student.severity}
                           </Badge>
@@ -505,7 +523,7 @@ export default function ReportsLogs() {
                     ))}
                     {atRisk.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-slate-400 text-sm">
+                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400 text-sm">
                           {loading ? 'Loading…' : 'No at-risk students found.'}
                         </td>
                       </tr>
@@ -555,7 +573,8 @@ export default function ReportsLogs() {
                       itemStyle={{ color: '#60A5FA' }}
                       formatter={(value) => [`${value}%`, 'Avg. Attendance']}
                     />
-                    <Bar dataKey="avg_attendance_pct" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="avg_attendance_pct" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Attendance" />
+                    <Bar dataKey="avg_attention" fill="#A855F7" radius={[4, 4, 0, 0]} name="Attention" />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -635,6 +654,7 @@ export default function ReportsLogs() {
                         <span className="text-xs text-slate-400 ml-2">{s.roll_no}</span>
                       </div>
                       <div className="flex items-center gap-3">
+                        {s.avg_attention > 0 && <AttentionBadge score={s.avg_attention} />}
                         {s.first_seen && (
                           <span className="text-[10px] text-slate-400 font-bold">
                             {new Date(s.first_seen).toLocaleTimeString()}

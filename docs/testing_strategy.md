@@ -47,7 +47,12 @@ pytest tests/ -v
 | `tests/test_students.py` | Student CRUD | create/read/delete, duplicate roll_no rejection, search |
 | `tests/test_sessions.py` | Session lifecycle | create, close, double-close 400/409, manual override, idempotency |
 | `tests/test_reports.py` | Reports & exports | dashboard, summary, at-risk, trends (422 on bad period), CSV/PDF content-type |
-| `tests/test_alerts.py` | Alerts & portal security | unit: threshold/tracker logic; API: list/resolve/thresholds; portal 403/404 |
+| `tests/test_alerts.py` | Alerts & portal security | Threshold logic, list/resolve, portal 403/404 |
+| `tests/test_batches.py` | Counselor batches | CSV import, scoping, reassignment |
+| `tests/test_attention.py` | Attention API | Storage, dashboard, counselor batch scoping |
+| `tests/test_attention_scorer.py` | ML scorer (unit) | Score bands, EMA smoothing, persist interval |
+| `tests/test_session_attention_ws.py` | WebSocket | Attention fields in WS payload |
+| `tests/test_rbac.py` | RBAC | Role boundaries across endpoints |
 
 ### Isolation strategy
 
@@ -145,22 +150,39 @@ print('Face encoder determinism: OK', sim)
 
 ---
 
-## E2E Smoke Test (CI — `docker-build` job)
+## CI pipeline
 
-After a successful `docker compose up`:
+Jobs run on push/PR to `main` and `develop` (see `.github/workflows/ci.yml`):
+
+| Job | Depends on | Notes |
+|-----|------------|-------|
+| Backend lint | — | flake8, black, isort |
+| Frontend lint | — | ESLint |
+| Backend tests | backend-lint | pytest + Postgres service |
+| Frontend tests | frontend-lint | Vitest |
+| ML model integrity | backend-test | Import head_pose, attention_scorer, posture_detector |
+| Docker build smoke | backend-test, frontend-test | **main branch only** |
+| Deploy | docker-build | **main push only**; requires deploy secrets |
+
+If lint fails, downstream test jobs are skipped. Docker build and deploy are also gated to the `main` branch.
+
+---
+
+## E2E smoke test (manual / post-deploy)
 
 ```bash
-# Health
+# Health + ML
 curl -f http://localhost:8000/health
+curl -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8000/api/v1/system/health | jq .ml
 
-# Auth
-TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"admin@test.com","password":"Admin1234!"}' | jq -r .access_token)
+# Dashboard includes attention KPI
+curl -f -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/reports/dashboard | jq .avg_attention
 
-# Protected route
-curl -f -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8000/api/v1/reports/dashboard
+# Live session attention (manual)
+# 1. Enroll student face → start session → verify WS sends attentionScore on faces
+# 2. Close session → verify sessions.avg_class_attention populated
+# 3. Counselor sees batch-scoped attention only on /reports/dashboard
+# 4. Student portal /portal/attention shows weekly trend
 ```
 
 ---

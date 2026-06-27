@@ -242,8 +242,16 @@ async def get_disengagement_history(
 # ── helper ────────────────────────────────────────────────────────────────────
 
 def _score_level(score: float) -> str:
-    if score >= 70:
-        return "high"
-    if score >= 40:
-        return "medium"
-    return "low"
+    try:
+        import sys, os
+        _root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+        from ml import attention_scorer
+        return attention_scorer.get_score_level(score)
+    except Exception:
+        if score >= 70:
+            return "high"
+        if score >= 40:
+            return "medium"
+        return "low"

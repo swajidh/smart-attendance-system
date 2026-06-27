@@ -243,6 +243,18 @@ export default function StudentPortal() {
               </div>
             )}
 
+            {profile?.low_attention_warning && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
+                <Brain className="w-5 h-5 text-amber-600 shrink-0" />
+                <div>
+                  <p className="font-bold text-amber-800 text-sm">Attention Warning</p>
+                  <p className="text-amber-700 text-xs">
+                    Your average attention score is {profile.overall_attention}/100 — below the expected threshold. Try to stay engaged during class sessions.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Stat cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <PortalStatCard

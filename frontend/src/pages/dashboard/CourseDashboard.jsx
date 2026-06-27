@@ -5,6 +5,7 @@ import {
   LayoutGrid, List, Filter, AlertCircle, RefreshCw, Edit2, Trash2,
   UserPlus, UserMinus, CheckCircle2,
 } from 'lucide-react';
+import AttentionBadge from '../../components/analytics/AttentionBadge';
 import PageHeader from '../../components/ui/PageHeader';
 import Button from '../../components/ui/Button';
 import Card, { CardHeader, CardContent } from '../../components/ui/Card';
@@ -160,6 +161,7 @@ export default function CourseDashboard() {
   // ── Derived stats ───────────────────────────────────────────────────────────
   const totalStudents = courseDetail?.total_students ?? 0;
   const avgAtt = courseDetail?.avg_attendance ?? 0;
+  const avgAttention = courseDetail?.avg_attention ?? 0;
 
   // Students not yet enrolled in the selected course
   const enrolledIds = new Set(courseDetail?.students?.map(s => s.id) ?? []);
@@ -389,6 +391,12 @@ export default function CourseDashboard() {
                         {courseDetail.avg_attendance}%
                       </p>
                     </div>
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Avg Attention</p>
+                      <div className="mt-2 flex justify-center">
+                        <AttentionBadge score={avgAttention} />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Enroll students */}
@@ -445,6 +453,7 @@ export default function CourseDashboard() {
                               <Badge variant={s.attendance_pct < 75 ? 'error' : s.attendance_pct > 85 ? 'success' : 'warning'}>
                                 {s.attendance_pct}%
                               </Badge>
+                              {s.avg_attention > 0 && <AttentionBadge score={s.avg_attention} />}
                               <button onClick={() => handleUnenroll(s.id)}
                                 className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-rose-400 hover:bg-rose-50 transition-all">
                                 <UserMinus className="w-3.5 h-3.5" />

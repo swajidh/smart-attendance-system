@@ -12,9 +12,16 @@ function attentionColor(score) {
   return { bg: 'bg-rose-100', text: 'text-rose-700' };
 }
 
-const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1')
-  .replace(/^http/, 'ws')
-  .replace(/\/api\/v1$/, '');
+function getWsBase() {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+  if (apiUrl.startsWith('/')) {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}`;
+  }
+  return apiUrl.replace(/^http/, 'ws').replace(/\/api\/v1\/?$/, '');
+}
+
+const WS_BASE = getWsBase();
 
 export default function LiveClassroom() {
   const webcamRef = useRef(null);
@@ -40,6 +47,8 @@ export default function LiveClassroom() {
     profilesLoaded: 0,
   });
   const [attentionScores, setAttentionScores] = useState({}); // { studentId: score }
+  const [attentionUnavailable, setAttentionUnavailable] = useState(false);
+  const [attentionUnavailableReason, setAttentionUnavailableReason] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isIdle, setIsIdle] = useState(true);
   const [ws, setWs] = useState(null);
@@ -113,6 +122,8 @@ export default function LiveClassroom() {
 
       if (data.type === 'connected') {
         setRecognitionProfiles(data.recognition_profiles ?? 0);
+        setAttentionUnavailable(data.attention_available === false);
+        setAttentionUnavailableReason(data.attention_reason || 'Attention scoring unavailable');
         setStats(prev => ({
           ...prev,
           profilesLoaded: data.recognition_profiles ?? 0,
@@ -126,6 +137,9 @@ export default function LiveClassroom() {
           toast.success(
             `Continuous monitoring active — ${data.recognition_profiles} face profile(s) loaded`
           );
+        }
+        if (data.attention_available === false) {
+          toast.error(data.attention_reason || 'Attention scoring is unavailable on this server', { duration: 8000 });
         }
         return;
       }
@@ -289,7 +303,7 @@ export default function LiveClassroom() {
       ctx.fill();
 
       const label = isPresent
-        ? `✓ ${face.studentName || face.studentId || 'Recognized'}`
+        ? `✓ ${face.studentName || face.studentId || 'Recognized'}${face.attentionScore != null ? ` · ${Math.round(face.attentionScore)}` : ''}`
         : face.recognitionConfidence != null
           ? `? ${Math.round(face.recognitionConfidence * 100)}%`
           : '⚠ Unknown';
@@ -299,6 +313,15 @@ export default function LiveClassroom() {
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 13px Inter, sans-serif';
       ctx.fillText(label, x + 8, y - 12);
+
+      if (isPresent && face.attentionScore != null) {
+        const scoreLabel = `${Math.round(face.attentionScore)}`;
+        ctx.fillStyle = face.attentionScore >= 70 ? '#059669' : face.attentionScore >= 40 ? '#d97706' : '#dc2626';
+        ctx.fillRect(x, y + h + 4, 36, 18);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px Inter, sans-serif';
+        ctx.fillText(scoreLabel, x + 6, y + h + 16);
+      }
     });
   }, [faces]);
 
@@ -391,6 +414,11 @@ export default function LiveClassroom() {
   // ── UI ─────────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {attentionUnavailable && sessionActive && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl px-4 py-3 text-sm font-medium">
+          Attention scoring unavailable: {attentionUnavailableReason}. Attendance tracking continues normally.
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Live Classroom</h1>

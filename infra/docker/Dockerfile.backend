@@ -1,9 +1,9 @@
 FROM python:3.11-slim AS base
 
-WORKDIR /app
+WORKDIR /workspace/backend
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 gcc \
+    libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 gcc postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
@@ -17,8 +17,11 @@ COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.
 COPY --from=deps /usr/local/bin /usr/local/bin
 
 COPY backend/ .
+COPY ml/ /workspace/ml/
 
-RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
+ENV PYTHONPATH=/workspace
+
+RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /workspace
 USER appuser
 
 EXPOSE 8000

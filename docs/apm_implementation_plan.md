@@ -1,69 +1,92 @@
 # Implementation Plan: Attendance Processing Module (APM)
 
-> **Last updated:** 2026-06-18
+> **Last updated:** 2026-06-18  
+> **Status:** ✅ **Fully implemented**
 
-## Current Implementation Status
+---
+
+## Current implementation status
 
 | Layer | Component | Status |
 |-------|-----------|--------|
-| **Frontend** | `LiveClassroom.jsx` | 🟡 Webcam feed, canvas bounding-box overlay, roster panel, manual override toggle, session finalize |
-| **Frontend** | WebSocket client | 🟡 Connects to `WS /api/v1/sessions/{id}/detect`; offline fallback when backend unavailable |
-| **Frontend** | Session API calls | 🟡 `POST /sessions`, `PUT /sessions/{id}/close`, `PUT /attendance/{record_id}` attempted; falls back to `localStorage` |
-| **Backend** | `WS /api/v1/attendance/ws/detect` | 🟡 MediaPipe face detection works; student matching is random |
-| **Backend** | Session/attendance REST routes | ❌ Not implemented |
-| **Backend** | Database persistence | ❌ Not implemented |
-| **ML** | Real embedding comparison | ❌ Not implemented (`ml/` directory empty) |
+| **Frontend** | `LiveClassroom.jsx` | ✅ Course selector, session create, WebSocket, canvas overlay, roster, override, close |
+| **Frontend** | WebSocket client | ✅ `WS /api/v1/sessions/{id}/detect` with attention overlay |
+| **Frontend** | Session REST | ✅ `POST /sessions`, `PUT /close`, `PUT /attendance/{id}` |
+| **Backend** | Session service | ✅ Create, recognize, close, override, unknown counter |
+| **Backend** | WebSocket handler | ✅ Detect → encode → match → attend → attention → alerts |
+| **Backend** | Database | ✅ `Session`, `Attendance` models with Alembic migrations |
+| **ML** | Face detection | ✅ `ml/face_detector.py` (MTCNN / MediaPipe) |
+| **ML** | Embeddings | ✅ `ml/face_encoder.py` |
+| **ML** | Matching | ✅ `ml/face_matcher.py` (cosine threshold 0.45) |
+| **ML** | Attention (Phase 6) | ✅ Head pose + scorer integrated in same WS pipeline |
 
-## Overview
-This document outlines the detailed flow and implementation plan for the Attendance Processing Module (APM-01 to APM-07). It involves real-time face detection, recognition using embeddings, attendance marking, and manual overrides.
+Legacy routes removed: `POST /attendance/enroll`, `WS /attendance/ws/detect`.
 
-## System Architecture
+---
 
-The implementation will be divided into three core layers:
-1. **Frontend (React)**: Handles real-time video capture, bounding box rendering, and communication with the backend.
-2. **Backend (FastAPI)**: Serves as the API gateway, managing database records (sessions, attendance statuses), and routing frames to the ML module.
-3. **ML Module (Python)**: Handles face detection and embedding extraction using optimized/quantized models.
+## Architecture
 
-## Phase 1: Real-Time Face Detection (APM-01 & APM-07)
-- **Frontend**: 
-  - ✅ `react-webcam` integrated in `LiveClassroom.jsx`
-  - ✅ Frames sent to backend via WebSocket when connected (`captureAndSendFrame` at ~5 FPS)
-  - ✅ Bounding box coordinates drawn on HTML5 canvas overlay
-  - 🟡 Offline fallback: camera runs without detection when WebSocket unavailable
-- **ML Module**:
-  - 🟡 MediaPipe Face Detection implemented in `backend/app/services/ml_service.py`
-  - ❌ No model optimization (APM-07 not started)
+```
+Browser (LiveClassroom)
+    │  base64 JPEG frames (~5 FPS)
+    ▼
+WS /api/v1/sessions/{id}/detect
+    │
+    ├─► face_detector     → bounding boxes
+    ├─► face_encoder      → embedding per face
+    ├─► face_matcher      → student ID (or Unknown)
+    ├─► session_service   → mark Present in DB
+    ├─► head_pose         → yaw/pitch/roll
+    ├─► attention_scorer  → 0–100 score (EMA smoothed)
+    ├─► posture_detector  → alert/head_down/looking_away/tilted
+    └─► alert_service     → low engagement (≥5 min below threshold)
+```
 
-## Phase 2: Face Recognition & Embeddings (APM-02 & APM-03)
-- **ML Module**:
-  - Once faces are detected, pass cropped face regions to a lightweight recognition model (e.g., MobileFaceNet).
-  - Extract embeddings and compare against a stored database of student embeddings using Cosine Similarity.
-  - Apply a confidence threshold (e.g., > 0.6).
-- **Backend API**:
-  - Return the `studentId` if recognized, or tag as `Unknown` if below the threshold.
-  - Log `Unknown` face occurrences for security audits.
+---
 
-## Phase 3: Automatic Attendance Marking (APM-04 & APM-05)
-- **Backend API (Session Logic)**:
-  - Create a new Attendance Session with a specific Session ID.
-  - When a recognized student is received, update their status to `Present` in the database.
-  - Implement idempotency to prevent duplicate `Present` marks for the same session.
-  - Store the timestamp of the first recognition.
-- **Session Closure**:
-  - Provide an endpoint to "Close Session".
-  - Iterate through the enrolled roster for the session; mark all students without a `Present` record as `Absent`.
-  - Generate an attendance summary report.
+## User story mapping
 
-## Phase 4: Manual Override (APM-06)
-- **Frontend Dashboard**:
-  - ✅ Attendance roster table with Present/Absent toggle in `LiveClassroom.jsx`
-  - ✅ Manual override attempts `PUT /attendance/{record_id}`; updates local state regardless
-- **Backend API**:
-  - ❌ PUT endpoint not implemented
-  - ❌ Audit trail and RBAC not implemented
+| Story | Implementation |
+|-------|----------------|
+| APM-01 Real-time detection | MediaPipe/MTCNN in `face_detector.py`; canvas overlay in frontend |
+| APM-02 Embedding match | `FaceMatcher.match()` against enrolled gallery |
+| APM-03 Unknown faces | Below-threshold match → status Unknown; unknown counter in session |
+| APM-04 Auto Present | `record_recognition()` on each match (idempotent) |
+| APM-05 Absent on close | `close_session()` marks roster members without Present as Absent |
+| APM-06 Manual override | `PUT /attendance/{record_id}` with `override: true` |
+| APM-07 Performance | CPU-friendly models; optional facenet-pytorch; frame debouncing |
 
-## Next Steps
-1. Implement session REST API (`POST /sessions`, `PUT /sessions/{id}/close`) and align WebSocket path with frontend
-2. Replace random matching in `ml_service.py` with real embedding comparison
-3. Initialize the `ml/` module with FaceEncoder and FaceMatcher
-4. Implement the database schema for Attendance Sessions and Logs
+---
+
+## WebSocket message contract
+
+See [`api_design.md`](api_design.md#websocket-protocol) for full request/response schemas.
+
+**Connect payload:** `{ "type": "connected", "attention_available": bool, "attention_reason": str? }`
+
+---
+
+## Session lifecycle
+
+1. Teacher selects course → `POST /sessions` → receives `session_id`
+2. Frontend opens WebSocket → streams frames
+3. Each recognized student gets attendance + attention updates
+4. Teacher may manually override roster entries
+5. `PUT /sessions/{id}/close` → finalize absentees, store `avg_class_attention`
+
+---
+
+## Thresholds
+
+| Parameter | Value | Location |
+|-----------|-------|----------|
+| Match confidence | ≥ 0.45 cosine (0.30 single-student) | `face_matcher.py` |
+| Face detect confidence (live) | 0.35 | `face_detector.py` |
+| Attention low band | < 40 | `attention_scorer.py` |
+
+---
+
+## Tests
+
+- `backend/tests/test_sessions.py` — create, close, override, idempotency
+- `backend/tests/test_session_attention_ws.py` — WS attention payload smoke test

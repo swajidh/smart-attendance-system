@@ -122,8 +122,11 @@ jobs:
           try:
               from ml.head_pose import HEAD_POSE_READY
               print(f'head_pose module loaded. HEAD_POSE_READY={HEAD_POSE_READY}')
+              if not HEAD_POSE_READY:
+                  print('HEAD_POSE_READY is False — attention pipeline will be degraded')
           except Exception as e:
-              print(f'head_pose import failed (non-fatal in CI): {e}')
+              print(f'head_pose import failed: {e}')
+              sys.exit(1)
           try:
               from ml.attention_scorer import update, get_class_average
               print('attention_scorer module OK')
@@ -245,5 +248,5 @@ jobs:
             docker compose -f infra/docker/docker-compose.yml up -d --build backend frontend
             # Smoke test
             sleep 10
-            curl -f http://localhost:8000/health || (docker compose -f infra/docker/docker-compose.yml rollback && exit 1)
+            curl -f http://localhost:8000/health || (echo "Deploy health check failed" && exit 1)
             echo "Deploy successful"

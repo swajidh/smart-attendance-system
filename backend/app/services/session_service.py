@@ -142,6 +142,12 @@ async def close_session(db: AsyncSession, session_id: UUID, user: User) -> Sessi
     session.end_time = datetime.now(timezone.utc)
     session.total_present = present_count
     session.total_absent = max(0, session.total_enrolled - present_count)
+
+    from app.services import attention_aggregates as attn_agg
+    attn_summary = await attn_agg.compute_and_store_session_aggregates(db, session_id)
+    session.avg_class_attention = attn_summary.get("class_average")
+    session.attention_samples = attn_summary.get("total_samples", 0)
+
     db.add(session)
     await db.commit()
     await db.refresh(session)

@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 
-from app.api.v1.attendance import router as attendance_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.students import router as students_router
 from app.api.v1.sessions import router as sessions_router
@@ -24,5 +23,3 @@ api_router.include_router(alerts_router)             # prefix: /alerts
 api_router.include_router(system_router)             # prefix: /system
 api_router.include_router(portal_router)             # prefix: /portal
 api_router.include_router(batches_router)            # prefix: /batches
-# Legacy attendance WebSocket (kept as alias; to be retired after Phase 4 is stable)
-api_router.include_router(attendance_router, prefix="/attendance", tags=["Attendance (legacy)"])

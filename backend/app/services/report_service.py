@@ -16,6 +16,8 @@ from app.models.attendance import Attendance, AttendanceStatus
 from app.models.course import Course
 from app.models.course_student import CourseStudent
 from app.models.student import Student
+from app.models.attention_log import AttentionLog
+from app.services import attention_aggregates as attn_agg
 
 
 # ── 5.1 Attendance summary ────────────────────────────────────────────────────
@@ -79,13 +81,17 @@ async def get_attendance_summary(
                 "total_absent": session.total_absent,
                 "total_unknown": session.total_unknown,
                 "attendance_pct": pct,
+                "avg_class_attention": round(float(session.avg_class_attention or 0), 1),
+                "attention_samples": session.attention_samples or 0,
             }
         )
 
     n = len(sessions_out)
+    attn_vals = [s["avg_class_attention"] for s in sessions_out if s["avg_class_attention"] > 0]
     return {
         "total_sessions": n,
         "avg_attendance_pct": round(pct_sum / n, 1) if n else 0.0,
+        "avg_attention": round(sum(attn_vals) / len(attn_vals), 1) if attn_vals else 0.0,
         "total_present": total_present,
         "total_absent": total_absent,
         "total_unknown": total_unknown,
@@ -160,12 +166,12 @@ async def get_student_percentage(db: AsyncSession, student_id: UUID) -> dict:
 async def get_at_risk_students(
     db: AsyncSession,
     threshold: float = 75.0,
+    attention_threshold: float = attn_agg.ATTENTION_LOW_THRESHOLD,
     department: Optional[str] = None,
     student_ids: Optional[list[UUID]] = None,
 ) -> list[dict]:
     """
-    Return students whose overall attendance is below `threshold`%.
-    Only students with ≥1 closed session are included.
+    Return students at risk due to low attendance OR low average attention.
     """
     # Count total closed sessions per student
     total_q = (
@@ -182,22 +188,67 @@ async def get_at_risk_students(
     )
     rows = (await db.execute(total_q)).all()
 
+    # Attention averages per student
+    attn_q = (
+        select(
+            AttentionLog.student_id,
+            func.avg(AttentionLog.score).label("avg_attention"),
+        )
+        .join(Session, AttentionLog.session_id == Session.id)
+        .where(Session.status == SessionStatus.closed)
+        .group_by(AttentionLog.student_id)
+    )
+    attn_rows = (await db.execute(attn_q)).all()
+    attn_map = {r.student_id: round(float(r.avg_attention or 0), 1) for r in attn_rows}
+
     at_risk = []
+    seen: set[UUID] = set()
     for row in rows:
         if row.total == 0:
             continue
         if student_ids is not None and row.student_id not in student_ids:
             continue
         pct = round(row.present / row.total * 100, 1)
-        if pct < threshold:
-            at_risk.append({"student_id": row.student_id, "total": row.total, "present": row.present, "pct": pct})
+        avg_attn = attn_map.get(row.student_id, 0.0)
+        att_low = pct < threshold
+        attn_low = avg_attn < attention_threshold and avg_attn > 0
+        if att_low or attn_low:
+            at_risk.append({
+                "student_id": row.student_id,
+                "total": row.total,
+                "present": row.present,
+                "pct": pct,
+                "avg_attention": avg_attn,
+                "risk_reason": (
+                    "both" if att_low and attn_low
+                    else "attendance" if att_low
+                    else "attention"
+                ),
+            })
+            seen.add(row.student_id)
+
+    # Students with attention data but no attendance records edge case
+    for sid, avg_attn in attn_map.items():
+        if sid in seen:
+            continue
+        if student_ids is not None and sid not in student_ids:
+            continue
+        if avg_attn < attention_threshold and avg_attn > 0:
+            at_risk.append({
+                "student_id": sid,
+                "total": 0,
+                "present": 0,
+                "pct": 0.0,
+                "avg_attention": avg_attn,
+                "risk_reason": "attention",
+            })
 
     if not at_risk:
         return []
 
     # Fetch student details
-    student_ids = [r["student_id"] for r in at_risk]
-    students_res = await db.execute(select(Student).where(Student.id.in_(student_ids)))
+    risk_ids = [r["student_id"] for r in at_risk]
+    students_res = await db.execute(select(Student).where(Student.id.in_(risk_ids)))
     students_map = {s.id: s for s in students_res.scalars().all()}
 
     result = []
@@ -207,7 +258,7 @@ async def get_at_risk_students(
             continue
         if department and s.department and department.lower() not in s.department.lower():
             continue
-        severity = "critical" if r["pct"] < 60 else "warning"
+        severity = "critical" if r["pct"] < 60 or r["avg_attention"] < 30 else "warning"
         result.append(
             {
                 "student_id": str(r["student_id"]),
@@ -216,13 +267,15 @@ async def get_at_risk_students(
                 "student_code": s.student_id,
                 "department": s.department,
                 "attendance_pct": r["pct"],
+                "avg_attention": r["avg_attention"],
+                "risk_reason": r["risk_reason"],
                 "total_sessions": r["total"],
                 "present_sessions": r["present"],
                 "severity": severity,
             }
         )
 
-    return sorted(result, key=lambda x: x["attendance_pct"])
+    return sorted(result, key=lambda x: (x["attendance_pct"], x["avg_attention"]))
 
 
 # ── 5.4 Attendance trends ─────────────────────────────────────────────────────
@@ -280,7 +333,17 @@ async def get_attendance_trends(
         else:
             parts = key.split("-W")
             label = f"W{parts[1]}"
-        trend.append({"period": key, "label": label, "avg_attendance_pct": avg, "session_count": len(vals)})
+        trend.append({
+            "period": key,
+            "label": label,
+            "avg_attendance_pct": avg,
+            "session_count": len(vals),
+        })
+
+    attn_trend = await attn_agg.get_attention_trends(db, course_id, period, limit)
+    attn_by_period = {t["period"]: t["avg_attention"] for t in attn_trend}
+    for t in trend:
+        t["avg_attention"] = attn_by_period.get(t["period"], 0.0)
 
     return trend
 
@@ -288,7 +351,7 @@ async def get_attendance_trends(
 # ── 5.5 Last-seen per student in a session ────────────────────────────────────
 
 async def get_last_seen(db: AsyncSession, session_id: UUID) -> list[dict]:
-    """Return first_seen timestamp for each student in the session."""
+    """Return first_seen and avg attention for each student in the session."""
     q = (
         select(Attendance, Student)
         .join(Student, Attendance.student_id == Student.id)
@@ -296,6 +359,8 @@ async def get_last_seen(db: AsyncSession, session_id: UUID) -> list[dict]:
         .order_by(Attendance.first_seen.desc().nullslast())
     )
     rows = (await db.execute(q)).all()
+    attn_summary = await attn_agg.get_session_attention_summary(db, session_id)
+    student_attn = attn_summary.get("students", {})
     return [
         {
             "student_id": str(att.student_id),
@@ -303,6 +368,7 @@ async def get_last_seen(db: AsyncSession, session_id: UUID) -> list[dict]:
             "roll_no": student.roll_no,
             "status": att.status.value,
             "first_seen": att.first_seen.isoformat() if att.first_seen else None,
+            "avg_attention": student_attn.get(str(att.student_id), {}).get("avg_score", 0.0),
         }
         for att, student in rows
     ]
@@ -343,6 +409,7 @@ async def get_dashboard_summary(
             "attendance_pct": (
                 round(s.total_present / s.total_enrolled * 100, 1) if s.total_enrolled else 0
             ),
+            "avg_class_attention": round(float(s.avg_class_attention or 0), 1),
         }
         for s, c in recent_rows
     ]
@@ -361,6 +428,9 @@ async def get_dashboard_summary(
     )
     avg_attendance = round(float(avg_q.scalar() or 0), 1)
 
+    avg_attention = await attn_agg.get_global_avg_attention(db, student_ids)
+    at_risk_attention_count = await attn_agg.count_low_attention_students(db, student_ids=student_ids)
+
     # Courses (for "Today's Schedule")
     courses_q = await db.execute(
         select(Course).order_by(Course.code).limit(5)
@@ -374,6 +444,8 @@ async def get_dashboard_summary(
         "total_students": students_count,
         "total_courses": courses_count,
         "avg_attendance_pct": avg_attendance,
+        "avg_attention": avg_attention,
+        "at_risk_attention_count": at_risk_attention_count,
         "recent_sessions": recent_sessions,
         "courses": courses,
     }

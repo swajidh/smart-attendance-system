@@ -92,6 +92,9 @@ async def portal_me(
 ):
     """Return own student profile."""
     student = await _get_own_student(db, current_user)
+    from app.services import attention_aggregates as attn_agg
+    overall_attn = await attn_agg.get_student_avg_attention(db, student.id)
+    low_attention = overall_attn > 0 and overall_attn < attn_agg.ATTENTION_LOW_THRESHOLD
     return {
         "id": str(student.id),
         "student_id": student.student_id,
@@ -103,6 +106,8 @@ async def portal_me(
         "embedding_status": student.embedding_status.value,
         "enrollment_date": student.enrollment_date.isoformat() if student.enrollment_date else None,
         "created_at": student.created_at.isoformat(),
+        "overall_attention": overall_attn,
+        "low_attention_warning": low_attention,
     }
 
 
