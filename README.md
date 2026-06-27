@@ -1,110 +1,163 @@
-# Smart Attendance System using CCTV
+# Smart Attendance System (AttendAI)
 
-This repository contains a full-stack smart attendance system that uses CCTV cameras and CNN-based facial recognition to:
-- Automate attendance marking
-- Estimate students' attention and focus levels
-- Provide a foundation for future exam monitoring functionality
+A full-stack platform for automated classroom attendance and behavioural attention monitoring. It uses face recognition to mark attendance and head-pose estimation to score student engagement during live sessions.
 
-## Repository Structure
-
-- `frontend/` – Web UI for students, teachers, and admins (**React 19 / Vite 8 / Tailwind**)
-- `backend/` – REST APIs, WebSocket handlers, and business logic (**FastAPI** — 3 endpoints implemented)
-- `ml/` – Planned CNN models and experiments (**directory exists, empty**; inference currently in `backend/app/services/ml_service.py`)
-- `docs/` – Documentation, design notes, and reports
-- `scripts/` – Development helper scripts (**README only**)
-- `infra/` – Deployment configuration (**README only**)
-- `tests/` – Cross-cutting tests (**README only**)
+**Stack:** React 19 · Vite 8 · FastAPI · PostgreSQL 16 · MediaPipe · Docker · GitHub Actions
 
 ---
 
-## Current Implementation Status
+## Repository structure
 
-> **Last updated:** 2026-06-18 · **Overall progress:** ~20–25%
+| Path | Purpose |
+|------|---------|
+| [`backend/`](backend/) | FastAPI REST API, WebSocket live detection, business logic, Alembic migrations |
+| [`frontend/`](frontend/) | React SPA — staff dashboard, student portal, auth pages |
+| [`ml/`](ml/) | Face detection/encoding/matching, head pose, attention scoring, posture detection |
+| [`docs/`](docs/) | Requirements, API reference, deployment, testing, roles |
+| [`infra/docker/`](infra/docker/) | Production Dockerfiles, nginx, compose |
+| [`scripts/`](scripts/) | DB backup and CCTV sample collection |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Lint, test, ML integrity, Docker smoke build, deploy |
+| [`docker-compose.yml`](docker-compose.yml) | Local dev stack (Postgres + migrate + backend + frontend) |
 
-| Area | Status | Summary |
-|------|--------|---------|
-| **Frontend UI** | 🟡 Substantial | Landing page, dashboard shell, student management, face enrollment, live classroom, course management, reports, and profile pages are built |
-| **Backend API** | 🟡 Minimal | 3 working endpoints: health check, face enrollment, WebSocket detection (`backend/app/api/v1/attendance.py`) |
-| **Database** | ❌ Not started | No PostgreSQL connection; empty model/schema stubs |
-| **Authentication** | ❌ Not started | `ProtectedRoute` bypasses auth with a mock user; login/signup pages not present |
-| **ML / Recognition** | 🟡 Partial | MediaPipe face detection is real; embeddings and student matching are mocked |
-| **Infra / Tests** | ❌ Not started | No Docker, CI, or test files |
-
-### What works today (demo / offline mode)
-
-The frontend uses an **API-first with `localStorage` fallback** pattern. Without a running backend, these flows still work in the browser:
-
-- Landing page and full dashboard navigation
-- Student CRUD, CSV bulk import UI, and searchable student registry
-- Guided webcam face capture (15 samples with angle prompts) and bulk upload UI
-- Live classroom webcam feed, canvas bounding-box overlay, manual attendance override, session finalize
-- Course CRUD (stored in `localStorage`)
-- Session reports and dashboard stats (from `localStorage` session logs)
-- Profile page UI (name, bio, avatar — falls back to mock user)
-
-### Backend endpoints actually implemented
-
-| Method | Path | Notes |
-|--------|------|-------|
-| `GET` | `/` | Health / welcome message |
-| `POST` | `/api/v1/attendance/enroll` | Face enrollment with blur/face validation; **mock** 128-d embeddings, in-memory storage |
-| `WS` | `/api/v1/attendance/ws/detect` | MediaPipe detection; **random** student matching |
-
-> **Path mismatch:** The frontend calls routes such as `/students`, `/sessions`, and `WS /sessions/{id}/detect` that are not yet implemented on the backend. See `docs/api_design.md` for the full gap analysis.
+> **Note:** `planning/` and `agent.md` are local-only (listed in `.gitignore`).
 
 ---
 
-## 🛠️ Required Backend API Endpoints (For Backend Developers)
+## Features (implemented)
 
-The frontend expects the following REST and WebSocket endpoints to be fully implemented on the backend. The Base URL is assumed to be `http://localhost:8000/api/v1`. All protected endpoints require a Bearer JWT Token in the `Authorization` header.
-
-### 1. Authentication & Profile
-- `POST /auth/login` - Authenticates user and returns `{ token, user }`.
-- `POST /auth/signup` - Registers a new user.
-- `POST /auth/forgot-password` - Requests password reset link.
-- `GET /auth/me` - Retrieves the authenticated user's profile.
-- `PUT /auth/me` - Updates the user's profile info (name, bio).
-- `PUT /auth/me/avatar` - Uploads user avatar (multipart/form-data).
-
-### 2. Student Management & Face Enrollment
-- `GET /students` - Lists all enrolled students.
-- `POST /students` - Creates a single new student record.
-- `POST /students/bulk-import` - Uploads a CSV to bulk import student data.
-- `DELETE /students/{id}` - Deletes a student record.
-- `POST /students/{id}/enroll` - Uploads webcam capture frames to enroll a specific student's face data.
-- `POST /students/bulk-enroll` - Uploads a ZIP file of images to bulk-enroll faces.
-
-### 3. Courses & Past Sessions
-- `GET /courses` - Retrieves a list of courses/classes available.
-- `GET /sessions` - Retrieves past attendance session histories.
-
-### 4. Live Classroom & Detection (Phase 4)
-- `POST /sessions`
-  - **Payload:** `{ "course_id": "CS-301" }`
-  - **Response:** `{ "id": "db_session_id_here" }`
-- `WS /sessions/{id}/detect`
-  - **Type:** WebSocket
-  - **Incoming Message (from Frontend):** `{ "type": "frame", "image": "base64_string" }`
-  - **Outgoing Message (to Frontend):** 
-    ```json
-    {
-      "faces": [
-        {
-          "studentId": "STU-1001",
-          "status": "Present",
-          "x": 10, "y": 20, "width": 20, "height": 30
-        }
-      ]
-    }
-    ```
-- `PUT /attendance/{record_id}`
-  - **Payload:** `{ "status": "Present", "override": true }`
-- `PUT /sessions/{id}/close`
-  - **Payload:** Final session statistics, timings, and attendance snapshot.
-
-### 5. Reporting (Upcoming Phase 5)
-- `GET /reports`
-  - **Response:** Aggregated attendance statistics for dashboard charts.
+- **Authentication & RBAC** — JWT login, student/staff signup, password reset, four roles (`student`, `teacher`, `counselor`, `admin`)
+- **Student & face enrollment** — CRUD, CSV import, guided webcam capture (10+ samples), quality validation, real embeddings
+- **Live classroom** — WebSocket face recognition, attendance marking, manual override, session close
+- **Attention tracking** — Per-student 0–100 scores from head pose, posture labels, class average, DB persistence
+- **Reports & exports** — Dashboard KPIs, at-risk lists, trends, correlation, CSV/PDF export
+- **Alerts** — Low engagement detection, risk list, configurable thresholds, notification prefs
+- **Counselor batches** — CSV intake assignment, batch-scoped dashboard for counselors
+- **Student portal** — Own attendance, attention, and course data at `/portal`
+- **System admin** — User management, health/ML status, backup/restore, SIS import, audit log
 
 ---
-*The frontend contains a built-in mock fallback for all of these endpoints so UI development can proceed independently. If the API fails to respond, the frontend automatically switches to localized mock simulations.*
+
+## Quick start
+
+### Docker (recommended)
+
+```bash
+git clone <repo-url>
+cd smart-attendance-system
+cp backend/.env.example backend/.env   # edit SECRET_KEY etc.
+docker compose up --build
+```
+
+| Service | URL |
+|---------|-----|
+| Frontend (Vite dev) | http://localhost:5173 |
+| Backend API | http://localhost:8000 |
+| Swagger docs | http://localhost:8000/docs |
+
+Migrations run automatically via the `migrate` service before the backend starts.
+
+Optional seed data:
+
+```bash
+docker compose exec backend python app/seed.py
+```
+
+### Local development (without Docker)
+
+**Backend** (from `backend/`):
+
+```bash
+cp .env.example .env
+pip install -r requirements.txt -r requirements-test.txt
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+```
+
+**Frontend** (from `frontend/`):
+
+```bash
+npm install
+# create frontend/.env with: VITE_API_URL=http://localhost:8000/api/v1
+npm run dev
+```
+
+**Tests:**
+
+```bash
+# Backend (requires Postgres)
+cd backend
+TEST_DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/sas_test pytest tests/ -v
+
+# Frontend
+cd frontend
+npm run test -- --run
+npm run lint
+```
+
+---
+
+## API overview
+
+Base URL: `http://localhost:8000/api/v1`
+
+| Prefix | Module |
+|--------|--------|
+| `/auth` | Login, register, profile, admin users |
+| `/students` | Student CRUD, face enrollment, bulk import |
+| `/courses` | Course CRUD, student enrollment |
+| `/sessions` | Session lifecycle; `WS /sessions/{id}/detect` for live recognition |
+| `/reports` | Analytics, at-risk, trends, CSV/PDF export |
+| `/attention` | Live scores, timelines, history |
+| `/alerts` | Alert log, risk list, thresholds |
+| `/batches` | Counselor batch CSV import and roster |
+| `/portal` | Student self-service (student role only) |
+| `/system` | Health, backup, audit, SIS import |
+
+Full reference: [`docs/api_design.md`](docs/api_design.md) · Interactive: `/docs`
+
+---
+
+## Roles
+
+| Role | Access |
+|------|--------|
+| **Student** | `/portal` — own data only |
+| **Counselor** | Dashboard (batch-scoped) — alerts, reports, attention |
+| **Teacher** | Live sessions, students, courses, exports |
+| **Admin** | Full access including system settings and batch import |
+
+Details: [`docs/roles.md`](docs/roles.md)
+
+---
+
+## CI/CD
+
+On push/PR to `main` or `develop`:
+
+1. Backend lint (flake8, black, isort)
+2. Backend tests (pytest + Postgres)
+3. ML module integrity
+4. Frontend lint (ESLint)
+5. Frontend tests (Vitest)
+6. Docker image smoke build (`main` branch only)
+7. Production deploy via SSH (`main` push only)
+
+Downstream jobs are skipped when an upstream job fails (e.g. tests skip if lint fails).
+
+See [`docs/deployment_guide.md`](docs/deployment_guide.md) and [`docs/testing_strategy.md`](docs/testing_strategy.md).
+
+---
+
+## Documentation index
+
+| Document | Description |
+|----------|-------------|
+| [`docs/project_overview.md`](docs/project_overview.md) | Architecture and technology stack |
+| [`docs/requirements_specification.md`](docs/requirements_specification.md) | 55 user stories (all implemented) |
+| [`docs/api_design.md`](docs/api_design.md) | Implemented API endpoints |
+| [`docs/roles.md`](docs/roles.md) | RBAC matrix and counselor batches |
+| [`docs/deployment_guide.md`](docs/deployment_guide.md) | Production deployment |
+| [`docs/testing_strategy.md`](docs/testing_strategy.md) | Test suites and CI |
+| [`docs/project_audit_report.md`](docs/project_audit_report.md) | Module completion audit |
+| [`backend/README.md`](backend/README.md) | Backend setup |
+| [`frontend/README.md`](frontend/README.md) | Frontend routes and structure |

@@ -5,8 +5,8 @@
 The Smart Attendance System (SAS) is a university-focused, real-time attendance
 and behavioural attention monitoring platform. It uses face recognition to mark
 student attendance and head-pose estimation to assess engagement during live
-lecture sessions. The system serves three user personas — students, lecturers /
-teachers, and administrators — each with a dedicated interface.
+lecture sessions. The system serves four staff/student personas — students,
+counselors, teachers, and administrators — each with a dedicated interface.
 
 ---
 
@@ -26,7 +26,7 @@ teachers, and administrators — each with a dedicated interface.
          │ asyncpg                   │ in-process
 ┌────────▼──────┐          ┌─────────▼───────────────────────┐
 │  PostgreSQL   │          │   ML Pipeline                    │
-│  (16-alpine)  │          │   FaceEncoder (FaceNet)          │
+│  (16-alpine)  │          │   FaceEncoder (FaceNet/MobileNet)│
 └───────────────┘          │   HeadPose (MediaPipe + solvePnP)│
                             │   AttentionScorer (EMA)          │
                             │   PostureDetector                │
@@ -87,7 +87,6 @@ smart-attendance-system/
 │   └── ci/                   (GitHub Actions lives at .github/workflows/)
 ├── scripts/                  Operational scripts (backup, CCTV sampling)
 ├── docs/                     Project documentation
-├── planning/                 Phase planning documents
 ├── .github/workflows/ci.yml  CI/CD pipeline
 └── docker-compose.yml        Root dev compose
 ```
@@ -103,7 +102,7 @@ smart-attendance-system/
 | Database | PostgreSQL 16 |
 | Migrations | Alembic |
 | Auth | JWT (python-jose) + bcrypt (passlib) |
-| Face recognition | FaceNet (facenet-pytorch) |
+| Face recognition | FaceNet (facenet-pytorch) or MobileNetV3 fallback |
 | Head pose | MediaPipe + OpenCV solvePnP |
 | Frontend | React 19 + Vite |
 | Routing | React Router v7 |
@@ -123,9 +122,9 @@ See **[roles.md](roles.md)** for the full permission matrix, registration flows,
 | Role | Access |
 |------|--------|
 | `student` | Personal portal (`/portal`) only — own attendance, attention, and courses (read-only) |
-| `counselor` | Dashboard read-only — alerts, at-risk lists, reports, correlation, attention analytics |
+| `counselor` | Dashboard read-only, batch-scoped — My Batch, alerts, at-risk, reports, correlation, attention |
 | `teacher` | Live sessions, student/course management, face enrollment, reports & exports, alerts |
-| `admin` | All teacher capabilities plus user management, system settings, backup, SIS import, audit logs |
+| `admin` | All teacher capabilities plus user management, system settings, backup, SIS import, counselor batch CSV, audit logs |
 
 ---
 
@@ -142,10 +141,13 @@ All 55 user stories from `docs/requirements_specification.md` are implemented an
 validated via the test suites in `backend/tests/` and frontend tests in
 `frontend/src/test/`. Key stories:
 
-- **SA-01 – SA-10**: Face enrollment, recognition, session management ✅
-- **SAM-01 – SAM-05**: Attention monitoring, alerting ✅
-- **SS-01 – SS-06**: Student portal, self-service access ✅
-- **SA-06, SAM-03**: Model integrity on deploy (CI `model-integrity` job) ✅
+- **UAM-01 – UAM-07**: Authentication, RBAC, profile ✅
+- **FEM-01 – FEM-07**: Face enrollment and quality validation ✅
+- **APM-01 – APM-07**: Live attendance via WebSocket ✅
+- **BTM-01 – BTM-07**: Attention scoring and posture ✅
+- **AIM-01 – AIM-07**: Alerts, thresholds, correlation ✅
+- **RSM-01 – RSM-07**: Reports, exports, student portal ✅
+- **SAM-01 – SAM-07, SA-01 – SA-06**: System admin, CI/CD, backups ✅
 
 ---
 

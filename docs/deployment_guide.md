@@ -23,13 +23,10 @@ cd smart-attendance-system
 cp backend/.env.example backend/.env
 # Edit backend/.env — set SECRET_KEY, MAIL_* etc.
 
-# 3. Start all services
+# 3. Start all services (migrations run automatically via migrate service)
 docker compose up --build
 
-# 4. Run database migrations (first time only)
-docker compose exec backend alembic upgrade head
-
-# 5. (Optional) Seed demo data
+# 4. (Optional) Seed demo data
 docker compose exec backend python app/seed.py
 ```
 

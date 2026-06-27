@@ -1,66 +1,51 @@
-# Node / frontend artifacts
+# Node / frontend
 node_modules/
 dist/
 build/
 .next/
 .turbo/
+frontend/.vite/
+coverage/
 
-# Python / backend / ML artifacts
+# Python
 __pycache__/
 *.pyc
+*.pyo
 .venv/
-env/
 venv/
-.ipynb_checkpoints/
-
-# Data and models (tracked separately if needed)
-ml/datasets/
-ml/models/
-
-# Environment & secrets
-.env
-.env.*
-backend/.env
-frontend/.env
-
-# OS / editor files
-.DS_Store
-Thumbs.db
-*.swp
-.idea/
-.vscode/
-
-# Node / frontend artifacts
-node_modules/
-dist/
-build/
-.next/
-.turbo/
-
-# Python / ML artifacts
-__pycache__/
-*.pyc
-.venv/
 env/
-venv/
 .ipynb_checkpoints/
+.pytest_cache/
+htmlcov/
+.coverage
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
 
-# Data and models
+# Data, models, uploads
 data/
 ml/datasets/
 ml/models/
+backend/uploads/
+uploads/
 
 # Environment & secrets
 .env
 .env.*
+!.env.example
+!**/.env.example
 backend/.env
 frontend/.env
 infra/.env
 
-# OS / editor files
+# Local-only / not for version control
+planning/
+agent.md
+non-negociable-cursor-reqs.md
+
+# OS / editor
 .DS_Store
 Thumbs.db
 *.swp
 .idea/
 .vscode/
-
