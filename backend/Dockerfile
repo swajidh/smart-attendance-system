@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /workspace/backend
 
-# System dependencies for opencv-headless, psutil, etc.
+# System dependencies for opencv-headless, psutil, postgresql-client (backup API)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libsm6 \
@@ -10,17 +10,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender-dev \
     libgomp1 \
     gcc \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies (cached layer)
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Application source
-COPY . .
+# Application + ML package (repo root layout for sys.path)
+COPY backend/ .
+COPY ml/ /workspace/ml/
 
-# Non-root user for security
-RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app
+ENV PYTHONPATH=/workspace
+
+RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /workspace
 USER appuser
 
 EXPOSE 8000

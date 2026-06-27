@@ -7,6 +7,7 @@ Usage:
 """
 import asyncio
 import logging
+import os
 
 from sqlalchemy import select
 
@@ -19,13 +20,16 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s — %(message)s")
 
 DEFAULT_ADMIN = {
     "email": "admin@school.edu",
-    "password": "Admin@1234",
+    "password": os.getenv("SEED_ADMIN_PASSWORD", "Admin@1234"),
     "name": "System Administrator",
     "role": UserRole.admin,
 }
 
 
 async def seed_admin() -> None:
+    if os.getenv("SEED_ADMIN", "false").lower() not in ("1", "true", "yes"):
+        logger.info("SEED_ADMIN not set — skipping default admin creation.")
+        return
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.email == DEFAULT_ADMIN["email"]))
         existing = result.scalar_one_or_none()

@@ -50,8 +50,11 @@ async def export_csv(
     writer = csv.writer(output)
     writer.writerow(
         ["Session ID", "Course Code", "Course Name", "Date",
-         "Student ID", "Student Name", "Roll No", "Status", "Confidence", "First Seen"]
+         "Student ID", "Student Name", "Roll No", "Status", "Confidence",
+         "First Seen", "Avg Attention"]
     )
+
+    from app.services import attention_aggregates as attn_agg
 
     for session, course in sessions:
         att_q = (
@@ -62,6 +65,7 @@ async def export_csv(
         )
         att_rows = (await db.execute(att_q)).all()
         for att, student in att_rows:
+            avg_attn = await attn_agg.get_student_session_attention(db, session.id, student.id)
             writer.writerow([
                 session.session_id,
                 course.code,
@@ -73,6 +77,7 @@ async def export_csv(
                 att.status.value,
                 f"{att.confidence:.3f}" if att.confidence is not None else "",
                 att.first_seen.strftime("%H:%M:%S") if att.first_seen else "",
+                avg_attn if avg_attn > 0 else "",
             ])
 
     return output.getvalue().encode("utf-8-sig")  # BOM for Excel compatibility
@@ -127,12 +132,12 @@ async def export_pdf(
 
     # Summary stats table
     stats_data = [
-        ["Total Sessions", "Avg Attendance", "Total Present", "Total Absent"],
+        ["Total Sessions", "Avg Attendance", "Avg Attention", "Total Present"],
         [
             str(summary["total_sessions"]),
             f"{summary['avg_attendance_pct']}%",
+            f"{summary.get('avg_attention', 0)}%",
             str(summary["total_present"]),
-            str(summary["total_absent"]),
         ],
     ]
     stats_table = Table(stats_data, colWidths=[4 * cm] * 4)
@@ -158,7 +163,7 @@ async def export_pdf(
     story.append(Spacer(1, 0.2 * cm))
 
     if summary["sessions"]:
-        headers = ["Session ID", "Course", "Date", "Enrolled", "Present", "Absent", "Rate"]
+        headers = ["Session ID", "Course", "Date", "Enrolled", "Present", "Att %", "Attention"]
         rows = [headers]
         for s in summary["sessions"]:
             rows.append([
@@ -167,8 +172,8 @@ async def export_pdf(
                 s["start_time"][:10],
                 str(s["total_enrolled"]),
                 str(s["total_present"]),
-                str(s["total_absent"]),
                 f"{s['attendance_pct']}%",
+                f"{s.get('avg_class_attention', 0)}",
             ])
 
         avail_w = 17 * cm

@@ -25,6 +25,7 @@ from app.models.attendance import Attendance  # noqa: F401
 from app.models.attention_log import AttentionLog  # noqa: F401
 from app.models.alert import Alert  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
+from app.models.counselor_batch import CounselorBatch  # noqa: F401
 
 # Alembic Config object
 config = context.config

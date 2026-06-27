@@ -103,7 +103,7 @@ async def send_reset_email(email: str, token: str) -> None:
     Send a password-reset email.
     If MAIL_USERNAME is not configured, log the link instead (dev mode).
     """
-    reset_url = f"http://localhost:5173/reset-password?token={token}"
+    reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token}"
 
     if not settings.MAIL_USERNAME:
         # Dev fallback — print to console

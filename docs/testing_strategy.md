@@ -150,17 +150,18 @@ print('Face encoder determinism: OK', sim)
 After a successful `docker compose up`:
 
 ```bash
-# Health
+# Health + ML
 curl -f http://localhost:8000/health
+curl -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8000/api/v1/system/health | jq .ml
 
-# Auth
-TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"admin@test.com","password":"Admin1234!"}' | jq -r .access_token)
+# Dashboard includes attention KPI
+curl -f -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/reports/dashboard | jq .avg_attention
 
-# Protected route
-curl -f -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8000/api/v1/reports/dashboard
+# Live session attention (manual)
+# 1. Enroll student face → start session → verify WS sends attentionScore on faces
+# 2. Close session → verify sessions.avg_class_attention populated
+# 3. Counselor sees batch-scoped attention only on /reports/dashboard
+# 4. Student portal /portal/attention shows weekly trend
 ```
 
 ---

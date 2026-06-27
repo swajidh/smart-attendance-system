@@ -41,6 +41,8 @@ class Session(Base):
     total_present: Mapped[int] = mapped_column(default=0, nullable=False)
     total_absent: Mapped[int] = mapped_column(default=0, nullable=False)
     total_unknown: Mapped[int] = mapped_column(default=0, nullable=False)
+    avg_class_attention: Mapped[float | None] = mapped_column(nullable=True)
+    attention_samples: Mapped[int | None] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False

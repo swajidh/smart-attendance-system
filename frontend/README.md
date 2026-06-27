@@ -46,8 +46,8 @@ VITE_API_URL=http://localhost:8000/api/v1
 | `/dashboard/live` | Live classroom | 🟡 WebSocket/API + offline fallback |
 | `/dashboard/reports` | Reports & logs | 🟡 `localStorage`; mock export |
 | `/dashboard/profile` | User profile | 🟡 API + mock user fallback |
-| `/dashboard/attention` | Attention analysis | ❌ Placeholder |
-| `/dashboard/settings` | System settings | ❌ Placeholder |
+| `/dashboard/attention` | Attention analysis | ✅ Live scores, timeline, history |
+| `/dashboard/settings` | System settings (admin) | ✅ Users, health, batches, SIS |
 | `/login`, `/signup`, `/forgot-password` | Auth | ❌ Not implemented (routes commented out) |
 
 ## Project structure

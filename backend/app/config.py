@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     MAIL_TLS: bool = True
     MAIL_SSL: bool = False
 
+    FRONTEND_URL: str = "http://localhost:5173"
+
     # Staff self-registration (admin / teacher / counselor portal)
     STAFF_REGISTRATION_KEY: str = "AttendAI-Staff-2026"
 

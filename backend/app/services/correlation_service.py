@@ -14,6 +14,7 @@ from sqlalchemy import select, func
 from app.models.student import Student
 from app.models.attendance import Attendance, AttendanceStatus
 from app.models.attention_log import AttentionLog
+from app.services import attention_aggregates as attn_agg
 from app.models.session import Session, SessionStatus
 from app.models.course_student import CourseStudent
 
@@ -54,15 +55,7 @@ async def get_student_correlation(
     )
 
     # Attention
-    attn_q = await db.execute(
-        select(func.avg(AttentionLog.score))
-        .join(Session, AttentionLog.session_id == Session.id)
-        .where(
-            AttentionLog.student_id == student_id,
-            Session.status == SessionStatus.closed,
-        )
-    )
-    avg_attention = round(float(attn_q.scalar() or 0), 1)
+    avg_attention = await attn_agg.get_student_avg_attention(db, student_id)
 
     # Correlation flags
     att_low = attendance_pct < 75

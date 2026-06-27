@@ -185,24 +185,23 @@ def estimate_from_bgr(img_bgr: np.ndarray) -> Optional[dict]:
 
 
 def estimate_from_base64(b64: str) -> Optional[dict]:
-    """Decode a base64 image string and run head pose estimation."""
-    if not _cv2_ok:
+    """Decode a base64 image string and run head pose estimation (first face)."""
+    img = decode_bgr_from_base64(b64)
+    if img is None:
         return None
-    try:
-        if "," in b64:
-            b64 = b64.split(",", 1)[1]
-        raw = base64.b64decode(b64)
-        arr = np.frombuffer(raw, dtype=np.uint8)
-        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        if img is None:
-            return None
-        return estimate_from_bgr(img)
-    except Exception:
-        return None
+    return estimate_from_bgr(img)
 
 
 def estimate_all_faces(img_bgr: np.ndarray) -> list[dict]:
     """Return head pose dicts for every detected face in the image."""
+    return [entry["pose"] for entry in estimate_all_faces_with_meta(img_bgr)]
+
+
+def estimate_all_faces_with_meta(img_bgr: np.ndarray) -> list[dict]:
+    """
+    Return pose + approximate face center for each detected face.
+    Each entry: {"pose": {yaw, pitch, roll}, "center_x": float, "center_y": float}
+    """
     if not _cv2_ok:
         return []
     h, w = img_bgr.shape[:2]
@@ -238,10 +237,50 @@ def estimate_all_faces(img_bgr: np.ndarray) -> list[dict]:
     if not landmarks_list:
         return []
 
-    poses = []
+    out = []
     for pts in landmarks_list:
         img_pts = np.array(pts, dtype=np.float64)
         pose = _solve_pnp(img_pts, h, w)
         if pose:
-            poses.append(pose)
-    return poses
+            cx = float(np.mean([p[0] for p in pts]))
+            cy = float(np.mean([p[1] for p in pts]))
+            out.append({"pose": pose, "center_x": cx, "center_y": cy})
+    return out
+
+
+def match_pose_to_bbox(
+    face_x: float,
+    face_y: float,
+    face_w: float,
+    face_h: float,
+    poses_meta: list[dict],
+) -> Optional[dict]:
+    """Pick the pose whose center is closest to the face bbox center."""
+    if not poses_meta:
+        return None
+    fx = face_x + face_w / 2.0
+    fy = face_y + face_h / 2.0
+    best = None
+    best_dist = float("inf")
+    for entry in poses_meta:
+        dx = entry["center_x"] - fx
+        dy = entry["center_y"] - fy
+        dist = dx * dx + dy * dy
+        if dist < best_dist:
+            best_dist = dist
+            best = entry["pose"]
+    return best
+
+
+def decode_bgr_from_base64(b64: str) -> Optional[np.ndarray]:
+    """Decode a base64 JPEG/PNG string to a BGR numpy array."""
+    if not _cv2_ok:
+        return None
+    try:
+        if "," in b64:
+            b64 = b64.split(",", 1)[1]
+        raw = base64.b64decode(b64)
+        arr = np.frombuffer(raw, dtype=np.uint8)
+        return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    except Exception:
+        return None

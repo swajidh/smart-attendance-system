@@ -349,6 +349,8 @@ async def detect_websocket(
         "type": "connected",
         "roster_size": session.total_enrolled,
         "recognition_profiles": len(embeddings),
+        "attention_available": bool(_attention_ready),
+        "attention_reason": None if _attention_ready else "Head pose / MediaPipe not available",
     }))
 
     unknown_batch_counter = 0  # debounce DB writes for unknowns
@@ -452,6 +454,16 @@ async def detect_websocket(
 
             single_face = len(raw_faces) == 1
 
+            # ── Per-face head pose (once per frame) ───────────────────────
+            frame_poses_meta: list = []
+            if _attention_ready and _head_pose_mod:
+                try:
+                    img_bgr = _head_pose_mod.decode_bgr_from_base64(b64_image)
+                    if img_bgr is not None:
+                        frame_poses_meta = _head_pose_mod.estimate_all_faces_with_meta(img_bgr)
+                except Exception as pose_exc:
+                    logger.debug("Frame pose estimation skipped: %s", pose_exc)
+
             # ── Face recognition (FaceEncoder + FaceMatcher) ──────────────
             response_faces = []
             unknown_count = 0
@@ -519,15 +531,19 @@ async def detect_websocket(
                             # ── Attention scoring (optional — never blocks attendance) ──
                             try:
                                 if _attention_ready and _head_pose_mod and _attention_scorer and _posture_detector:
-                                    pose_result = _head_pose_mod.estimate_from_base64(b64_image)
+                                    pose_result = _head_pose_mod.match_pose_to_bbox(
+                                        face["x"], face["y"], face["width"], face["height"],
+                                        frame_poses_meta,
+                                    )
                                     sid_str = str(session_id)
                                     mid_str = matched_id
                                     attn_score = _attention_scorer.update(sid_str, mid_str, pose_result)
                                     posture_result = _posture_detector.detect(sid_str, mid_str, pose_result)
+                                    posture_label = posture_result.get("posture") if posture_result else "neutral"
 
                                     face_result["attentionScore"] = attn_score
                                     face_result["headPose"] = pose_result
-                                    face_result["posture"] = posture_result.get("posture") if posture_result else None
+                                    face_result["posture"] = posture_label
                                     face_result["postureFlagged"] = posture_result.get("flagged", False) if posture_result else False
 
                                     if _attention_scorer.should_persist(sid_str, mid_str):
@@ -539,7 +555,7 @@ async def detect_websocket(
                                                 UUID(matched_id),
                                                 attn_score,
                                                 pose_result,
-                                                posture_result.get("posture") if posture_result else None,
+                                                posture_label,
                                             )
                             except Exception as att_exc:
                                 logger.debug("Attention scoring skipped: %s", att_exc)

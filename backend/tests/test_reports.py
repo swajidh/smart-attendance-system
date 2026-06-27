@@ -24,7 +24,8 @@ async def test_dashboard_summary_authenticated(
     data = r.json()
     assert "total_students" in data
     assert "total_courses" in data
-    assert "avg_attendance" in data
+    assert "avg_attendance_pct" in data
+    assert "avg_attention" in data
 
 
 async def test_dashboard_summary_unauthenticated(client: AsyncClient):

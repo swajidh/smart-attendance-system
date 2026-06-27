@@ -11,7 +11,9 @@ import {
   ShieldCheck,
   AlertCircle,
   Calendar,
+  Brain,
 } from 'lucide-react';
+import AttentionBadge from '../../components/analytics/AttentionBadge';
 import Card, { CardContent } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -34,6 +36,7 @@ export default function DashboardHome() {
     totalStudents: 0,
     activeCourses: 0,
     avgAttendancePct: 0,
+    avgAttention: 0,
     recentSessions: [],
     courses: [],
   });
@@ -48,6 +51,7 @@ export default function DashboardHome() {
           totalStudents: d.total_students,
           activeCourses: d.total_courses,
           avgAttendancePct: d.avg_attendance_pct,
+          avgAttention: d.avg_attention ?? 0,
           recentSessions: d.recent_sessions,
           courses: d.courses,
         });
@@ -60,10 +64,13 @@ export default function DashboardHome() {
     load();
   }, []);
 
+  const canViewAttention = canAccess(userRole, PERMISSIONS.attention_read);
+
   const stats = [
     { name: 'Total Students', value: loading ? '…' : data.totalStudents, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
     { name: 'Active Courses', value: loading ? '…' : data.activeCourses, icon: BookOpen, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { name: 'Avg Attendance', value: loading ? '…' : `${data.avgAttendancePct}%`, icon: TrendingUp, color: 'text-amber-600', bg: 'bg-amber-50' },
+    ...(canViewAttention ? [{ name: 'Avg Attention', value: loading ? '…' : data.avgAttention, icon: Brain, color: 'text-purple-600', bg: 'bg-purple-50' }] : []),
   ];
 
   const lastAnomaly = data.recentSessions.some((s) => s.total_unknown > 0);
@@ -111,7 +118,7 @@ export default function DashboardHome() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
           <Card key={stat.name} className="border-slate-100 shadow-sm hover:shadow-md transition-shadow rounded-[28px]">
             <CardContent className="p-6">
@@ -199,7 +206,10 @@ export default function DashboardHome() {
                           <div>
                             <p className="text-sm font-bold text-slate-800">{session.course_name}</p>
                             <p className="text-[10px] text-slate-400 font-bold uppercase">
-                              {session.total_present} Present · {session.attendance_pct}%
+                              {session.total_present} Present · {session.attendance_pct}% att
+                              {session.avg_class_attention > 0 && (
+                                <> · <AttentionBadge score={session.avg_class_attention} /></>
+                              )}
                             </p>
                           </div>
                         </div>
