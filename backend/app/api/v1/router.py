@@ -10,6 +10,7 @@ from app.api.v1.alerts import router as alerts_router
 from app.api.v1.system import router as system_router
 from app.api.v1.portal import router as portal_router
 from app.api.v1.batches import router as batches_router
+from app.api.v1.exams import router as exams_router
 
 api_router = APIRouter()
 
@@ -23,3 +24,4 @@ api_router.include_router(alerts_router)             # prefix: /alerts
 api_router.include_router(system_router)             # prefix: /system
 api_router.include_router(portal_router)             # prefix: /portal
 api_router.include_router(batches_router)            # prefix: /batches
+api_router.include_router(exams_router, prefix="/exams", tags=["Exam Monitoring"])

@@ -12,7 +12,7 @@ A full-stack platform for automated classroom attendance and behavioural attenti
 |------|---------|
 | [`backend/`](backend/) | FastAPI REST API, WebSocket live detection, business logic, Alembic migrations |
 | [`frontend/`](frontend/) | React SPA — staff dashboard, student portal, auth pages |
-| [`ml/`](ml/) | Face detection/encoding/matching, head pose, attention scoring, posture detection |
+| [`ml/`](ml/) | Face detection/encoding/matching, head pose, attention scoring, posture detection, **exam proctoring pipeline** |
 | [`docs/`](docs/) | Requirements, API reference, deployment, testing, roles |
 | [`infra/docker/`](infra/docker/) | Production Dockerfiles, nginx, compose |
 | [`scripts/`](scripts/) | DB backup and CCTV sample collection |
@@ -34,6 +34,7 @@ A full-stack platform for automated classroom attendance and behavioural attenti
 - **Counselor batches** — CSV intake assignment, batch-scoped dashboard for counselors
 - **Student portal** — Own attendance, attention, and course data at `/portal`
 - **System admin** — User management, health/ML status, backup/restore, SIS import, audit log
+- **Exam monitoring** — Hall/CCTV vision proctoring (gaze, phones, sustained violations), separate from attendance; human review workflow + PDF integrity reports
 
 ---
 

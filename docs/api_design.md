@@ -114,6 +114,26 @@ On connect, server sends `{ "type": "connected", "attention_available": true|fal
 
 ---
 
+## Exam monitoring — `/exams`
+
+| Method | Path | Permission | Description |
+|--------|------|------------|-------------|
+| `POST` | `/exams` | `exam_sessions` | Create exam `{ course_id, room_name }` |
+| `GET` | `/exams` | `exam_violations_read` | List exams (counselor batch-scoped via `batch_id`) |
+| `GET` | `/exams/dashboard` | `exam_violations_read` | KPIs for dashboard card |
+| `GET` | `/exams/{exam_id}` | `exam_violations_read` | Exam detail + stats |
+| `POST` | `/exams/{exam_id}/start` | `exam_sessions` | Begin calibration |
+| `POST` | `/exams/{exam_id}/calibrate` | `exam_sessions` | Finalize baseline, activate monitoring |
+| `PUT` | `/exams/{exam_id}/close` | `exam_sessions` | End exam session |
+| `GET` | `/exams/{exam_id}/violations` | `exam_violations_read` | Paginated violation log |
+| `PUT` | `/exams/{exam_id}/violations/{vid}/review` | `exam_violations_review` | Confirm/dismiss with note |
+| `GET` | `/exams/{exam_id}/export/pdf` | `exam_reports_export` | Integrity report PDF |
+| `WS` | `/exams/{exam_id}/monitor` | `exam_monitor` | Live hall frame processing |
+
+Separate from `/sessions` — no attendance or attention writes. See [`exam_monitoring.md`](exam_monitoring.md).
+
+---
+
 ## Reports — `/reports`
 
 | Method | Path | Permission | Description |
@@ -201,7 +221,7 @@ CSV format: see [`roles.md`](roles.md#counselor-batch-assignment).
 
 ## Database models
 
-`User`, `Student`, `Course`, `CourseStudent`, `Session`, `Attendance`, `AttentionLog`, `Alert`, `AuditLog`, `CounselorBatch`
+`User`, `Student`, `Course`, `CourseStudent`, `Session`, `Attendance`, `AttentionLog`, `Alert`, `AuditLog`, `CounselorBatch`, `ExamSession`, `ExamViolation`, `ExamCalibration`
 
 Migrations: `backend/alembic/versions/` (3 revisions, head: `b7e4f1a2c3d6`).
 

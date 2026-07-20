@@ -19,6 +19,7 @@ Design artifacts and reference documentation for the Smart Attendance System (At
 | [`project_audit_report.md`](project_audit_report.md) | Module-by-module implementation audit |
 | [`development_todo.md`](development_todo.md) | Phase roadmap (all phases complete) |
 | [`apm_implementation_plan.md`](apm_implementation_plan.md) | Attendance processing module design & status |
+| [`exam_monitoring.md`](exam_monitoring.md) | Exam hall proctoring — calibration, violations, review workflow |
 
 ---
 

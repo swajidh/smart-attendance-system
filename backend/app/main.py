@@ -36,6 +36,17 @@ async def lifespan(app: FastAPI):
 
     # Ensure upload directories exist
     os.makedirs(os.path.join(settings.UPLOAD_DIR, "avatars"), exist_ok=True)
+    os.makedirs(os.path.join(settings.UPLOAD_DIR, "exam_violations"), exist_ok=True)
+
+    try:
+        from ml.exam_object_detector import preload
+
+        if preload():
+            logger.info("Exam object detector (YOLO) preloaded")
+        else:
+            logger.warning("Exam object detector (YOLO) not available — phone/cheat-sheet detection disabled")
+    except Exception as exc:
+        logger.warning("Exam object detector preload failed: %s", exc)
 
     yield
 

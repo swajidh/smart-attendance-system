@@ -12,6 +12,8 @@ import {
   LogOut,
   User,
   ScanFace,
+  ShieldAlert,
+  ScanEye,
 } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import api from '../../services/api';
@@ -27,6 +29,8 @@ const ICONS = {
   Courses: BookOpen,
   Attendance: ClipboardList,
   Attention: BrainCircuit,
+  'Exam Monitoring': ScanEye,
+  'Exam Review': ShieldAlert,
   Alerts: TriangleAlert,
   Reports: BarChart2,
   Administration: Settings,
