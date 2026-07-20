@@ -63,6 +63,7 @@ class Student(Base):
     attendance_records = relationship("Attendance", back_populates="student", cascade="all, delete-orphan")
     attention_logs = relationship("AttentionLog", back_populates="student", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="student", cascade="all, delete-orphan")
+    exam_violations = relationship("ExamViolation", back_populates="student", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Student {self.student_id} — {self.name}>"

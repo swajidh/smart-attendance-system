@@ -21,6 +21,11 @@ export const PERMISSIONS = {
   system_admin: 'system_admin',
   batches_read: 'batches_read',
   batches_manage: 'batches_manage',
+  exam_sessions: 'exam_sessions',
+  exam_monitor: 'exam_monitor',
+  exam_violations_read: 'exam_violations_read',
+  exam_violations_review: 'exam_violations_review',
+  exam_reports_export: 'exam_reports_export',
 };
 
 export const ROLE_LABELS = {
@@ -74,6 +79,7 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.reports_read,
     PERMISSIONS.attention_read,
     PERMISSIONS.batches_read,
+    PERMISSIONS.exam_violations_read,
   ],
   teacher: [
     PERMISSIONS.dashboard_view,
@@ -88,6 +94,11 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.reports_read,
     PERMISSIONS.export_reports,
     PERMISSIONS.attention_read,
+    PERMISSIONS.exam_sessions,
+    PERMISSIONS.exam_monitor,
+    PERMISSIONS.exam_violations_read,
+    PERMISSIONS.exam_violations_review,
+    PERMISSIONS.exam_reports_export,
   ],
   admin: [
     PERMISSIONS.dashboard_view,
@@ -107,6 +118,11 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.system_admin,
     PERMISSIONS.batches_read,
     PERMISSIONS.batches_manage,
+    PERMISSIONS.exam_sessions,
+    PERMISSIONS.exam_monitor,
+    PERMISSIONS.exam_violations_read,
+    PERMISSIONS.exam_violations_review,
+    PERMISSIONS.exam_reports_export,
   ],
 };
 
@@ -120,6 +136,8 @@ export const NAV_ITEMS = [
   { name: 'Courses', path: '/dashboard/courses', permission: PERMISSIONS.manage_courses, category: 'MANAGEMENT' },
   { name: 'Attendance', path: '/dashboard/reports', permission: PERMISSIONS.reports_read, category: 'MANAGEMENT' },
   { name: 'Attention', path: '/dashboard/attention', permission: PERMISSIONS.attention_read, category: 'ANALYTICS' },
+  { name: 'Exam Monitoring', path: '/dashboard/exam-monitoring', permission: PERMISSIONS.exam_monitor, category: 'ANALYTICS' },
+  { name: 'Exam Review', path: '/dashboard/exam-review', permission: PERMISSIONS.exam_violations_read, category: 'ANALYTICS' },
   { name: 'Alerts', path: '/dashboard/alerts', permission: PERMISSIONS.alerts, category: 'ANALYTICS' },
   { name: 'Reports', path: '/dashboard/reports', permission: PERMISSIONS.reports_read, category: 'ANALYTICS' },
   { name: 'Administration', path: '/dashboard/settings', permission: PERMISSIONS.system_admin, category: 'SYSTEM' },

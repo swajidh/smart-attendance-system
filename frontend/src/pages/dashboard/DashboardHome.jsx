@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Calendar,
   Brain,
+  ScanEye,
 } from 'lucide-react';
 import AttentionBadge from '../../components/analytics/AttentionBadge';
 import Card, { CardContent } from '../../components/ui/Card';
@@ -31,6 +32,8 @@ export default function DashboardHome() {
   const storedUser = JSON.parse(localStorage.getItem('smart_attendance_user') || '{}');
   const userRole = storedUser?.role || 'teacher';
   const canRunLive = canAccess(userRole, PERMISSIONS.live_sessions);
+  const canExamMonitor = canAccess(userRole, PERMISSIONS.exam_monitor);
+  const canViewExamStats = canAccess(userRole, PERMISSIONS.exam_violations_read);
   const canManageCourses = canAccess(userRole, PERMISSIONS.manage_courses);
   const [data, setData] = useState({
     totalStudents: 0,
@@ -40,6 +43,7 @@ export default function DashboardHome() {
     recentSessions: [],
     courses: [],
   });
+  const [examStats, setExamStats] = useState({ violations_7d: 0, pending_reviews: 0, active_exams: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -62,7 +66,12 @@ export default function DashboardHome() {
       }
     };
     load();
-  }, []);
+    if (canViewExamStats) {
+      api.get('/exams/dashboard')
+        .then((res) => setExamStats(res.data))
+        .catch(() => {});
+    }
+  }, [canViewExamStats]);
 
   const canViewAttention = canAccess(userRole, PERMISSIONS.attention_read);
 
@@ -71,6 +80,7 @@ export default function DashboardHome() {
     { name: 'Active Courses', value: loading ? '…' : data.activeCourses, icon: BookOpen, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { name: 'Avg Attendance', value: loading ? '…' : `${data.avgAttendancePct}%`, icon: TrendingUp, color: 'text-amber-600', bg: 'bg-amber-50' },
     ...(canViewAttention ? [{ name: 'Avg Attention', value: loading ? '…' : data.avgAttention, icon: Brain, color: 'text-purple-600', bg: 'bg-purple-50' }] : []),
+    ...(canViewExamStats ? [{ name: 'Exam Violations (7d)', value: loading ? '…' : examStats.violations_7d, icon: ScanEye, color: 'text-rose-600', bg: 'bg-rose-50' }] : []),
   ];
 
   const lastAnomaly = data.recentSessions.some((s) => s.total_unknown > 0);
@@ -180,6 +190,36 @@ export default function DashboardHome() {
                   View My Batch <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
+            </div>
+          </Card>
+          )}
+
+          {canExamMonitor && (
+          <Card className="border-slate-100 shadow-sm rounded-[32px] overflow-hidden">
+            <div className="p-8 bg-gradient-to-br from-rose-700 to-slate-800 text-white relative">
+              <div className="relative z-10">
+                <h3 className="text-2xl font-bold mb-2">Exam Hall Monitoring</h3>
+                <p className="text-rose-100 mb-4 max-w-md">
+                  Vision-only proctoring for hall/CCTV feeds — gaze, phones, and sustained violation review. Fully separate from live classroom attendance.
+                </p>
+                <div className="flex flex-wrap items-center gap-4 mb-6">
+                  <div className="rounded-xl bg-white/10 px-4 py-2 border border-white/10">
+                    <p className="text-[10px] font-bold uppercase text-rose-200">Violations (7d)</p>
+                    <p className="text-2xl font-bold">{examStats.violations_7d}</p>
+                  </div>
+                  <div className="rounded-xl bg-white/10 px-4 py-2 border border-white/10">
+                    <p className="text-[10px] font-bold uppercase text-rose-200">Pending review</p>
+                    <p className="text-2xl font-bold">{examStats.pending_reviews}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => navigate('/dashboard/exam-monitoring')}
+                  className="bg-white text-rose-700 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-rose-50 transition-colors"
+                >
+                  Start Exam Monitoring <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+              <ScanEye className="absolute right-0 bottom-0 w-64 h-64 text-white/10 -mr-10 -mb-10" />
             </div>
           </Card>
           )}

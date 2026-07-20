@@ -6,6 +6,15 @@ build/
 .turbo/
 frontend/.vite/
 coverage/
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Python
 __pycache__/
@@ -28,6 +37,16 @@ ml/datasets/
 ml/models/
 backend/uploads/
 uploads/
+backups/
+*.sql
+*.sql.gz
+*.dump
+
+# ML weights & binaries (auto-downloaded at runtime — do not commit)
+*.pt
+*.pth
+*.onnx
+ml/face_landmarker.task
 
 # Environment & secrets
 .env
@@ -37,15 +56,30 @@ uploads/
 backend/.env
 frontend/.env
 infra/.env
+*.pem
+*.key
+secrets/
+credentials.json
 
-# Local-only / not for version control
+# Local-only planning & agent notes (not for GitHub)
 planning/
 agent.md
 non-negociable-cursor-reqs.md
+docs/apm_implementation_plan.md
+docs/development_todo.md
+docs/project_audit_report.md
+
+# Cursor / IDE assistant artifacts
+.cursor/
+*.plan.md
 
 # OS / editor
 .DS_Store
 Thumbs.db
+desktop.ini
+ehthumbs.db
 *.swp
+*.swo
+*~
 .idea/
 .vscode/

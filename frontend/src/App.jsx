@@ -18,6 +18,8 @@ import DashboardHome from './pages/dashboard/DashboardHome';
 import CourseDashboard from './pages/dashboard/CourseDashboard';
 import FaceEnrollment from './pages/dashboard/FaceEnrollment';
 import LiveClassroom from './pages/dashboard/LiveClassroom';
+import ExamMonitoring from './pages/dashboard/ExamMonitoring';
+import ExamReview from './pages/dashboard/ExamReview';
 import AttentionAnalysis from './pages/dashboard/AttentionAnalysis';
 import ReportsLogs from './pages/dashboard/ReportsLogs';
 import SystemSettings from './pages/dashboard/SystemSettings';
@@ -64,6 +66,14 @@ export default function App() {
 
               <Route element={<ProtectedRoute requiredPermission={PERMISSIONS.batches_read} />}>
                 <Route path="my-batch" element={<CounselorBatchPage />} />
+              </Route>
+
+              <Route element={<ProtectedRoute requiredPermission={PERMISSIONS.exam_monitor} />}>
+                <Route path="exam-monitoring" element={<ExamMonitoring />} />
+              </Route>
+
+              <Route element={<ProtectedRoute requiredPermission={PERMISSIONS.exam_violations_read} />}>
+                <Route path="exam-review" element={<ExamReview />} />
               </Route>
 
               <Route element={<ProtectedRoute requiredPermission={PERMISSIONS.alerts} />}>

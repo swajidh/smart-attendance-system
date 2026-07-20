@@ -105,6 +105,25 @@ async def system_health(db: AsyncSession = Depends(get_db_session)):
         and ml_status.get("attention_scorer") == "ready"
     )
 
+    exam_parts = []
+    try:
+        from ml import exam_gaze, exam_violation_engine
+        exam_parts.append(exam_gaze is not None)
+        exam_parts.append(exam_violation_engine is not None)
+    except Exception:
+        pass
+    try:
+        from ml import exam_object_detector
+        exam_parts.append(exam_object_detector.is_ready())
+    except Exception:
+        pass
+    if len(exam_parts) >= 2 and all(exam_parts):
+        ml_status["exam_pipeline"] = "ready"
+    elif exam_parts:
+        ml_status["exam_pipeline"] = "degraded"
+    else:
+        ml_status["exam_pipeline"] = "not_loaded"
+
     try:
         from ml.face_encoder import ENCODER_READY, EMBEDDING_DIM
         if ENCODER_READY:

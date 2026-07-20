@@ -153,7 +153,8 @@ validated via the test suites in `backend/tests/` and frontend tests in
 
 ## Future Scope
 
-- **Exam monitoring** — extend attention tracking to exam sessions
-- **Advanced proctoring** — multi-face detection, gaze tracking
 - **Redis** — replace in-memory caches for multi-worker deployments
 - **Kubernetes** — `infra/k8s/` manifests for large-scale deployment
+- **Advanced proctoring** — custom smartwatch YOLO, seat maps, audio (post-v1 exam module enhancements)
+
+> **Exam monitoring (v1)** — implemented as a separate module. See [`exam_monitoring.md`](exam_monitoring.md).

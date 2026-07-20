@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # Staff self-registration (admin / teacher / counselor portal)
     STAFF_REGISTRATION_KEY: str = "AttendAI-Staff-2026"
 
+    # Exam monitoring thresholds
+    EXAM_GAZE_YAW_THRESHOLD: float = 28.0
+    EXAM_GAZE_PITCH_UP_DELTA: float = 15.0
+    EXAM_PHONE_CONFIDENCE: float = 0.30
+    EXAM_SNAPSHOT_RETENTION_DAYS: int = 30
+
     @property
     def allowed_origins_list(self) -> List[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]

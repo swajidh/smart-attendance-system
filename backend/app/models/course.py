@@ -37,6 +37,7 @@ class Course(Base):
     instructor = relationship("User", back_populates="courses_taught", foreign_keys=[instructor_id])
     student_enrollments = relationship("CourseStudent", back_populates="course", cascade="all, delete-orphan")
     sessions = relationship("Session", back_populates="course", cascade="all, delete-orphan")
+    exam_sessions = relationship("ExamSession", back_populates="course", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Course {self.code} — {self.name}>"

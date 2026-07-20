@@ -30,6 +30,7 @@ python-multipart>=0.0.6
 torch>=2.1.0
 torchvision>=0.16.0
 facenet-pytorch>=2.5.3
+ultralytics>=8.0.0
 
 # --- File Export (CSV/PDF reports) ---
 reportlab>=4.1.0

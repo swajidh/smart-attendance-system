@@ -44,6 +44,13 @@ class Permission(str, Enum):
     batches_read = "batches_read"
     batches_manage = "batches_manage"
 
+    # Exam monitoring
+    exam_sessions = "exam_sessions"
+    exam_monitor = "exam_monitor"
+    exam_violations_read = "exam_violations_read"
+    exam_violations_review = "exam_violations_review"
+    exam_reports_export = "exam_reports_export"
+
 
 ROLE_LABELS: dict[UserRole, str] = {
     UserRole.student: "Student",
@@ -92,6 +99,7 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.reports_read,
         Permission.attention_read,
         Permission.batches_read,
+        Permission.exam_violations_read,
     },
     UserRole.teacher: {
         Permission.dashboard_view,
@@ -106,6 +114,11 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.reports_read,
         Permission.export_reports,
         Permission.attention_read,
+        Permission.exam_sessions,
+        Permission.exam_monitor,
+        Permission.exam_violations_read,
+        Permission.exam_violations_review,
+        Permission.exam_reports_export,
     },
     UserRole.admin: {
         Permission.dashboard_view,
@@ -125,6 +138,11 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.system_admin,
         Permission.batches_read,
         Permission.batches_manage,
+        Permission.exam_sessions,
+        Permission.exam_monitor,
+        Permission.exam_violations_read,
+        Permission.exam_violations_review,
+        Permission.exam_reports_export,
     },
 }
 

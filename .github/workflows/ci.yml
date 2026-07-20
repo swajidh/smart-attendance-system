@@ -111,7 +111,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install ML dependencies
-        run: pip install mediapipe>=0.10.9 numpy>=1.26.0 opencv-python-headless>=4.9.0
+        run: pip install mediapipe>=0.10.9 numpy>=1.26.0 opencv-python-headless>=4.9.0 ultralytics>=8.0.0
 
       - name: Check ML module imports
         run: |
@@ -138,6 +138,19 @@ jobs:
               print('posture_detector module OK')
           except Exception as e:
               print(f'posture_detector import failed: {e}')
+              sys.exit(1)
+          try:
+              from ml import exam_violation_engine, exam_gaze
+              print('exam_violation_engine and exam_gaze OK')
+          except Exception as e:
+              print(f'exam ML modules import failed: {e}')
+              sys.exit(1)
+          try:
+              from ml import exam_object_detector
+              ready = exam_object_detector.is_ready()
+              print(f'exam_object_detector loaded (ready={ready})')
+          except Exception as e:
+              print(f'exam_object_detector import failed: {e}')
               sys.exit(1)
           print('All ML modules verified.')
           "

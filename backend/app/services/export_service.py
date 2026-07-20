@@ -204,3 +204,79 @@ async def export_pdf(
 
     doc.build(story)
     return buf.getvalue()
+
+
+async def export_exam_pdf(db: AsyncSession, exam_id: UUID) -> bytes:
+    """Generate exam integrity report PDF."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.enums import TA_CENTER
+
+    from sqlalchemy import select
+    from app.models.exam_session import ExamSession
+    from app.models.exam_violation import ExamViolation, ExamReviewStatus
+    from app.models.student import Student
+    from app.models.course import Course
+
+    exam = (await db.execute(select(ExamSession).where(ExamSession.id == exam_id))).scalar_one_or_none()
+    if not exam:
+        return b""
+
+    course = (await db.execute(select(Course).where(Course.id == exam.course_id))).scalar_one_or_none()
+
+    q = (
+        select(ExamViolation, Student)
+        .outerjoin(Student, ExamViolation.student_id == Student.id)
+        .where(ExamViolation.exam_session_id == exam_id)
+        .order_by(ExamViolation.created_at)
+    )
+    rows = (await db.execute(q)).all()
+    confirmed = sum(1 for v, _ in rows if v.review_status == ExamReviewStatus.confirmed)
+    dismissed = sum(1 for v, _ in rows if v.review_status == ExamReviewStatus.dismissed)
+    pending = sum(1 for v, _ in rows if v.review_status == ExamReviewStatus.pending)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=2 * cm, leftMargin=2 * cm)
+    styles = getSampleStyleSheet()
+    heading = ParagraphStyle("h", parent=styles["Heading1"], alignment=TA_CENTER, fontSize=16)
+
+    story = [
+        Paragraph("Exam Integrity Report", heading),
+        Paragraph(f"Exam: {exam.exam_code} — {course.name if course else ''}", styles["Normal"]),
+        Paragraph(f"Room: {exam.room_name}", styles["Normal"]),
+        Spacer(1, 0.4 * cm),
+        Paragraph(
+            f"Total violations: {exam.total_violations} | Confirmed: {confirmed} | "
+            f"Dismissed: {dismissed} | Pending: {pending}",
+            styles["Normal"],
+        ),
+        Spacer(1, 0.4 * cm),
+    ]
+
+    if rows:
+        table_data = [["Time", "Student", "Type", "Severity", "Status", "Message"]]
+        for viol, student in rows:
+            table_data.append([
+                viol.created_at.strftime("%H:%M:%S"),
+                student.name if student else "—",
+                viol.violation_type.value,
+                viol.severity.value,
+                viol.review_status.value,
+                viol.message[:40],
+            ])
+        tbl = Table(table_data, colWidths=[2 * cm, 3 * cm, 2.5 * cm, 2 * cm, 2 * cm, 5 * cm])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#7F1D1D")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+        ]))
+        story.append(tbl)
+    else:
+        story.append(Paragraph("No violations recorded.", styles["Normal"]))
+
+    doc.build(story)
+    return buf.getvalue()
