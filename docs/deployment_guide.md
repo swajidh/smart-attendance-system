@@ -39,6 +39,8 @@ Services will be available at:
 
 ## Production Deployment
 
+> **Oracle Cloud (free demo hosting):** see [oracle_cloud_deploy.md](./oracle_cloud_deploy.md) for step-by-step VM setup, HTTPS, and Docker commands.
+
 ### 1. Environment variables
 
 Create a `.env` file in the project root (never commit it):
